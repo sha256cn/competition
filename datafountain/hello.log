@@ -1,0 +1,17 @@
+2018-04-08 13:38:30,663 - __main__ - INFO - ['./prepare/PIPE_start_fillna_ascat_drop4cols_outliers4k_extract_log_getdummies_drop_dummycols_rmsetest_export_04-08-13_37.h5', './prepare/PIPE_fillna_ascat_drop_cols_drop4cols_outliers4k_extract_log_getdummies_rmsetest_export_04-08-13_37.h5']
+2018-04-08 13:40:05,118 - __main__ - INFO - Ridge(alpha=0.001, copy_X=True, fit_intercept=True, max_iter=None,
+   normalize=False, random_state=42, solver='auto', tol=0.001)
+2018-04-08 13:40:08,684 - __main__ - INFO - Lasso(alpha=0.001, copy_X=True, fit_intercept=True, max_iter=1000,
+   normalize=False, positive=False, precompute=False, random_state=42,
+   selection='cyclic', tol=0.0001, warm_start=False)
+2018-04-08 13:40:14,009 - __main__ - INFO - ElasticNet(alpha=0.001, copy_X=True, fit_intercept=True, l1_ratio=0.5,
+      max_iter=1000, normalize=False, positive=False, precompute=False,
+      random_state=42, selection='cyclic', tol=0.0001, warm_start=False)
+2018-04-08 13:40:19,438 - __main__ - INFO - SVR(C=0.01, cache_size=200, coef0=0.0, degree=3, epsilon=0.1, gamma='auto',
+  kernel='linear', max_iter=1000, shrinking=True, tol=0.001, verbose=False)
+2018-04-08 13:40:24,019 - __main__ - INFO - LGBMRegressor(boosting_type='gbdt', colsample_bytree=1, learning_rate=0.05,
+       max_bin=255, max_depth=-1, min_child_samples=10, min_child_weight=5,
+       min_split_gain=0, n_estimators=1000, nthread=-1, num_leaves=31,
+       objective='regression', random_state=42, reg_alpha=0, reg_lambda=0,
+       seed=0, silent=True, subsample=0.5, subsample_for_bin=50000,
+       subsample_freq=1)

@@ -1,0 +1,4 @@
+2018-04-08 13:40:08.684557,Ridge,0.114240818793,./models/HT_0.1142_Ridge_0408_1340.model,./prepare/PIPE_start_fillna_ascat_drop4cols_outliers4k_extract_log_getdummies_drop_dummycols_rmsetest_export_04-08-13_37.h5
+2018-04-08 13:40:14.007649,Lasso,0.113346809195,./models/HT_0.1133_Lasso_0408_1340.model,./prepare/PIPE_start_fillna_ascat_drop4cols_outliers4k_extract_log_getdummies_drop_dummycols_rmsetest_export_04-08-13_37.h5
+2018-04-08 13:40:19.438014,ElasticNet,0.111866294714,./models/HT_0.1119_ElasticNet_0408_1340.model,./prepare/PIPE_start_fillna_ascat_drop4cols_outliers4k_extract_log_getdummies_drop_dummycols_rmsetest_export_04-08-13_37.h5
+2018-04-08 13:40:24.018802,SVR,0.113541278752,./models/HT_0.1135_SVR_0408_1340.model,./prepare/PIPE_start_fillna_ascat_drop4cols_outliers4k_extract_log_getdummies_drop_dummycols_rmsetest_export_04-08-13_37.h5
