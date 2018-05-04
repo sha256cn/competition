@@ -18,30 +18,42 @@ from sklearn.model_selection import train_test_split
 from sklearn.model_selection import cross_val_score
 from sklearn.model_selection import GridSearchCV
 import lightgbm as lgb
+from sklearn.model_selection import cross_val_predict
 import warnings
 warnings.filterwarnings("ignore")
 
 path_train = "/data/dm/train.csv"  # 训练文件
 path_test = "/data/dm/test.csv"  # 测试文件
 pay = 0.3 #赔付率阈值
-speedcut = [0,5,30,80,120,200] #速度分段
-scl = ["1", "2", "3", "4", "5"] #速度分段标签
+cv = 0
 fcl = {'tfc' : 12, 'sfc' : 3, 'hfc' : 5, 'lfc' : 4, 'cfc' : 3} #特征选择参数
-fs = {'p1':['tfc4','hfc3'],
-      'p2':['tfc4','hfc3','lfc2'],
-      'p3':['tfc4','hfc3','lfc2','cfc2'],
-      'p4':['tfc4','hfc3','lfc2','cfc2','tfc1'],
-      'p5':['tfc4','hfc3','lfc2','cfc2','tfc1','tfc11'],
-      'p6':['tfc4','hfc3','lfc2','cfc2','tfc1','tfc11','tfc5'],
-      'p7':['tfc4','hfc3','tfc12','sfc3'],
-      'p8':['tfc4','hfc3','tfc12','hfc5'],
-      'p9':['tfc4','hfc3','tfc10','hfc5'],
-      'p10':['tfc4','hfc3','tfc10','hfc5','cfc2']}#特征方案
-# fs = {'p1' : ['tfc12','tfc7','tfc4','hfc3','cfc2','hfc4']}
-afl = ['tfc1','tfc2','tfc3','tfc4','tfc5','tfc6','tfc7','tfc8','tfc9','tfc10','tfc11','tfc12',
-        'sfc1','sfc2','sfc3','hfc1','hfc2','hfc3','hfc4','hfc5','lfc1','lfc2','lfc3','lfc4','cfc1',
-        'cfc2','cfc3']
-istrain = 0
+fs = {'p1':['tfc4', 'tfc12__14', 'tfc12__0', 'tfc12__14', 'tfc12__22', 'tfc12__21', 'hfc3'],
+      'p2':['tfc4','tfc12','hfc3'],
+      'p3':['tfc4', 'tfc12__14', 'tfc12__0', 'tfc12__14', 'tfc12__22', 'tfc12__21', 'hfc3','cfc2'],
+      'p4':['tfc4','tfc12','hfc3','hfc5'],}#特征方案
+# fs = {'p1' : ['tfc1']}
+afl = ['tfc1_mean', 'tfc1_std', 'tfc2_mean', 'tfc2_std', 'tfc3_mean', 'tfc3_std', 'tfc4_mean', 
+       'tfc4_std', 'tfc5_mean', 'tfc5_std', 'tfc6_mean', 'tfc6_std', 'tfc7_max', 'tfc7_mean', 
+       'tfc7_min', 'tfc7_std', 'tfc7_pc1', 'tfc7_pc2', 'tfc8_mean', 'tfc8_std', 'tfc9_mean', 
+       'tfc9_std', 'tfc10_mean', 'tfc10_std', 'tfc11_mean', 'tfc11_std', 'tfc12__0', 'tfc12__1', 
+       'tfc12__2', 'tfc12__3', 'tfc12__4', 'tfc12__5', 'tfc12__6', 'tfc12__7', 'tfc12__8', 
+       'tfc12__9', 'tfc12__10', 'tfc12__11', 'tfc12__12', 'tfc12__13', 'tfc12__14', 'tfc12__15', 
+       'tfc12__16', 'tfc12__17', 'tfc12__18', 'tfc12__19', 'tfc12__20', 'tfc12__21', 'tfc12__22', 
+       'tfc12__23', 'sfc1_max', 'sfc1_mean', 'sfc1_min', 'sfc1_std', 'sfc1_pc1', 'sfc1_pc2', 
+       'sfc2_max', 'sfc2_mean', 'sfc2_min', 'sfc2_std', 'sfc2_pc1', 'sfc2_pc2', 'sfc3_max', 
+       'sfc3_mean', 'sfc3_min', 'sfc3_std', 'sfc3_pc1', 'sfc3_pc2', 'hfc1_max', 'hfc1_mean', 
+       'hfc1_min', 'hfc1_std', 'hfc1_pc1', 'hfc1_pc2', 'hfc2_max', 'hfc2_mean', 'hfc2_min', 
+       'hfc2_std', 'hfc2_pc1', 'hfc2_pc2', 'hfc3_max', 'hfc3_mean', 'hfc3_min', 'hfc3_std', 
+       'hfc3_pc1', 'hfc3_pc2', 'hfc4__0', 'hfc4__1', 'hfc4__2', 'hfc4__3', 'hfc4__4', 'hfc4__5', 
+       'hfc4__6', 'hfc4__7', 'hfc4__8', 'hfc4__9', 'hfc4__10', 'hfc4__11', 'hfc4__12', 'hfc4__13', 
+       'hfc4__14', 'hfc4__15', 'hfc4__16', 'hfc4__17', 'hfc4__18', 'hfc4__19', 'hfc4__20', 'hfc4__21', 
+       'hfc4__22', 'hfc4__23', 'hfc5_max', 'hfc5_mean', 'hfc5_min', 'hfc5_std', 'hfc5_pc1', 'hfc5_pc2', 
+       'lfc1_max', 'lfc1_mean', 'lfc1_min', 'lfc1_std', 'lfc1_pc1', 'lfc1_pc2', 'lfc2_max', 'lfc2_mean', 
+       'lfc2_min', 'lfc2_std', 'lfc2_pc1', 'lfc2_pc2', 'lfc3_max', 'lfc3_mean', 'lfc3_min', 'lfc3_std', 
+       'lfc3_pc1', 'lfc3_pc2', 'lfc4_max', 'lfc4_mean', 'lfc4_min', 'lfc4_std', 'lfc4_pc1', 'lfc4_pc2',
+       'cfc1_cs1', 'cfc2_cs1', 'cfc3_cs3']
+# afl = ['tfc4', 'tfc12__14', 'tfc12__0', 'tfc12__14', 'tfc12__22', 'tfc12__21', 'hfc3']
+istrain = 1
 mn = 'gbr'
 dfn = 'df_tfc1'
 statsf = 'stats2'
@@ -350,6 +362,19 @@ def data_transformation(df):
     # df['rs'] = np.rint(df['SPEED']/10).astype(np.uint8)
     df = df[(df['month'] != 10) | ((df['month'] == 10) & (df['day'] > 9))]#排除国庆长假
     df = df[(df['month'] != 9) | ((df['month'] == 9) & ((df['day'] > 18) | (df['day'] < 15)))]#排除中秋
+    df = df.sort_values(by = ['TERMINALNO','TIME'],axis = 0).reset_index(drop=True)
+    df['stime'] = df['TIME'].shift(1)
+    df['TRIP_ID'] = df['TIME'] - df['stime']
+    ts = df['TRIP_ID'].values
+    tslv1 = len(ts)
+    ts[0] = 1
+    for i1 in range(1,tslv1):
+        if ts[i1]>300:
+            ts[i1] = ts[i1-1] + 1
+        else:
+            ts[i1] = ts[i1-1]
+    df = df.drop(['stime'], axis=1)
+    df['TRIP_ID'] = ts
 
 def tuning(X_train,y_train):
     param = {
@@ -386,11 +411,12 @@ def predicate(X_train,y_train,X_test):
         params = {'n_estimators': 500, 'max_depth': 4,'learning_rate': 0.01, 'loss': 'ls'}
         model = GradientBoostingRegressor(**params)
     elif mn == 'lgb':
-        model = lgb.LGBMRegressor(objective='regression',num_leaves=31,learning_rate=0.01,n_estimators=500)
+        model = lgb.LGBMRegressor(boosting_type = "dart" , learning_rate=0.0021 )
     else:
         model = xgb.XGBRegressor(max_depth=4, learning_rate=0.01, n_estimators=500, silent=True, objective='reg:linear')
         # model = xgb.XGBRegressor(learning_rate=0.1, max_depth=2, silent=True, objective='reg:linear')        
-    model.fit(X_train, y_train)
+    # print(X_train.columns.tolist)
+    model.fit(X_train.values, y_train)
     if mn != 'xgboost': 
         feature_importance = model.feature_importances_
         sorted_idx = np.argsort(-feature_importance)
@@ -401,33 +427,50 @@ def predicate(X_train,y_train,X_test):
         #     print(feature_name[i]+':'+str(feature_importance[i]))
         # print(feature_name[sorted_idx[0]]+"|"+feature_name[sorted_idx[1]]+"|"+feature_name[sorted_idx[2]]+"|"+feature_name[sorted_idx[3]]+"|"+feature_name[sorted_idx[4]])
     # return cross_val_score(model,X_train,y_train,scoring = ginival, cv=10)
-    return model.predict(X_test)
+    return model.predict(X_test.values)
 
 def output(df):
     temp = df[['TERMINALNO', 'Y']].sort_values(by='Y', axis=0, ascending=True)
     temp.rename(columns={'TERMINALNO': 'Id', 'Y': 'Pred'}, inplace=True)
     temp.to_csv('./model/output.csv', index=False)
 
-
-def train(X,y):
+def ds(X,y,random):
     t = pd.concat([X,y], axis=1)
     df_pay1 = t[ (t['Y'] > 0) & (t['Y'] <= 0.8)]
     df_pay2 = t[ (t['Y'] > 0.8)]
     df_npay = t[t['Y'] <= 0]
-    X_train1, X_test1, y_train1, y_test1 = train_test_split(df_pay1.iloc[:,:-1], df_pay1['Y'], random_state=11, test_size= 0.15)
-    X_train2, X_test2, y_train2, y_test2 = train_test_split(df_npay.iloc[:,:-1], df_npay['Y'], random_state=20, test_size= 0.15)
-    X_train3, X_test3, y_train3, y_test3 = train_test_split(df_pay2.iloc[:,:-1], df_pay2['Y'], random_state=11, test_size= 0.15)
+    X_train1, X_test1, y_train1, y_test1 = train_test_split(df_pay1.iloc[:,:-1], df_pay1['Y'], random_state=random, test_size= 0.15)
+    X_train2, X_test2, y_train2, y_test2 = train_test_split(df_npay.iloc[:,:-1], df_npay['Y'], random_state=random, test_size= 0.15)
+    X_train3, X_test3, y_train3, y_test3 = train_test_split(df_pay2.iloc[:,:-1], df_pay2['Y'], random_state=random, test_size= 0.15)
     X_train = pd.concat([X_train1,X_train2,X_train3], axis=0)
     X_test = pd.concat([X_test1,X_test2,X_test3], axis=0)
     y_train = pd.concat([y_train1,y_train2,y_train3],axis=0)
     y_test = pd.concat([y_test1,y_test2,y_test3],axis=0)
-    # print(X_train.columns)
+    return X_train,X_test,y_train,y_test
+
+def train(X,y):
+    if cv == 1:
+        X.fillna(0, inplace = True)
+        params = {'n_estimators': 500, 'max_depth': 4,'learning_rate': 0.01, 'loss': 'ls'}
+        model = GradientBoostingRegressor(**params)
+        pred = cross_val_predict(model,X,y,cv=10)
+        return -1,gini(y,pred)
+    X_train,X_test,y_train,y_test = ds(X,y,76)
     pred = predicate(X_train, y_train, X_test)
-    r2v = r2_score(y_test,pred)
-    giniv = gini(y_test,pred)
-    print(mn + 'r2_score:'+ str(r2v))
-    print(mn + ' gini:'+str(giniv))
-    return giniv
+    r2v1 = r2_score(y_test,pred)
+    giniv1 = gini(y_test,pred)
+
+    X_train,X_test,y_train,y_test = ds(X,y,11)
+    pred = predicate(X_train, y_train, X_test)
+    r2v2 = r2_score(y_test,pred)
+    giniv2 = gini(y_test,pred)
+
+    X_train,X_test,y_train,y_test = ds(X,y,20)
+    pred = predicate(X_train, y_train, X_test)
+    r2v3 = r2_score(y_test,pred)
+    giniv3 = gini(y_test,pred)
+
+    return (r2v1+r2v2+r2v3)/3,(giniv1+giniv2+giniv3)/3
 
 def gini(actual, pred):
     assert (len(actual) == len(pred))
@@ -487,7 +530,7 @@ def featureselected(fs,df_base,df_feature):
     for index,value in fs.items():
         for i,v in enumerate(value):
             for i1,v1 in enumerate(colums):
-                if v1.startswith(ｖ):
+                if (('_' in v) & (v1 == v)) | (('_' not in v) & (v1.startswith(ｖ+'_'))):
                     if first == False:
                         starti=i1
                         first = True
@@ -512,7 +555,7 @@ def score(fs,df_base,df_feature):
     for index,value in fs.items():
         for i,v in enumerate(value):
             for i1,v1 in enumerate(colums):
-                if v1.startswith(ｖ):
+                if (('_' in v) & (v1 == v)) | (('_' not in v) & (v1.startswith(ｖ+'_'))):
                     if first == False:
                         starti=i1
                         first = True
@@ -530,11 +573,11 @@ def score(fs,df_base,df_feature):
             first = False
             starti = 0
             endi = -1
-        print("feature:" + ','.join(value))
-        giniv = train(t.iloc[:,1:],df_feature['Y'])
+        r2v,giniv = train(t.iloc[:,1:],df_feature['Y'])
+        print('feature:' + ','.join(value) + ',giniscore:' + str(giniv) + ',r2score:' + str(r2v))
         # tuning(t.iloc[:,1:],df_feature['Y'])
         t = df_base
-    return giniv
+    return r2v,giniv
 
 def make2fs(afl,fl,hs,df_base,df_feature):
     hscorep = hs
@@ -550,11 +593,11 @@ def make2fs(afl,fl,hs,df_base,df_feature):
             if i2 > i1:
                 cfl.append(afl[i2])
                 cfs['f1'] = cfl
-                hscorec = score(cfs,df_base,df_feature)
-                print('feature:' + ','.join(cfl) + ',score:' + str(hscorec))
+                r2sv ,hscorec = score(cfs,df_base,df_feature)
                 if hscorec > hscorep:
                     hscorep = hscorec
                     hsfl = cfl.copy()
+                    print('feature:' + ','.join(cfl) + ',giniscore:' + str(hscorec) + ',r2score:' + str(r2sv))
                 cfl.pop()
         cfl.pop()
     print('hs feature:' + ','.join(hsfl)+',score:' + str(hscorep))
@@ -576,11 +619,11 @@ def makefs(afl,fl,hs,df_base,df_feature):
                 if i2 not in cfl:
                     cfl.append(i2)
                     cfs['f1'] = cfl
-                    hscorec = score(cfs,df_base,df_feature)
-                    print('feature:' + ','.join(cfl) + ',score:' + str(hscorec))
+                    hsr2v , hscorec = score(cfs,df_base,df_feature)
                     if hscorec > hscorep:
                         hscorep = hscorec
                         hsfl = cfl.copy()
+                        print('feature:' + ','.join(cfl) + ',giniscore:' + str(hscorec) + ',r2score:' + str(hsr2v))
                     cfl.pop()
             print('hs feature:' + ','.join(hsfl)+',score:' + str(hscorep))
             cfl = hsfl
@@ -599,14 +642,15 @@ def process():
     # print(df_owner.shape[0],df_pay.shape[0])
     df_owner.rename(columns={'TRIP_ID':'counts'}, inplace = True)
     df_base = df_owner.iloc[:,:1]
-    print("hci"+str(hci)+",tci"+str(tci)+",lci"+str(lci)+",sci"+str(sci))
+    print("hci"+str(hci)+",tci"+str(tci)+",lci"+str(lci)+",sci"+str(sci),",cv"+str(cv))
     if istrain == 1:
         df_feature = makefeature(fcl,df,df_base,df_owner)
-        # make2fs(afl,[],0,df_base,df_feature)
+        # print(df_feature.columns.tolist())
+        # makefs(afl,['hfc2_pc2','tfc4_std','tfc12__14','tfc12__22','tfc12__21','tfc10_std'],0.09367407600027881,df_base,df_feature)
         score(fs,df_base,df_feature)    
     else:
-        f = {'p1':['tfc4','hfc3','lfc2','cfc2','tfc1','tfc11','tfc5']}
-        df_feature = makefeature1(f,df,df_base,df_owner)
+        f = {'p1':['sfc2_std','tfc12__14','tfc4_std','hfc3_mean','tfc5_std','lfc2_min','cfc1_cs1','tfc9_std','tfc12__0','hfc3_pc1','cfc3_cs3']}
+        df_feature = makefeature(fcl,df,df_base,df_owner)
         t = featureselected( f ,df_base,df_feature)
         X_train = t.iloc[:,1:]
         y_train = df_feature.iloc[:,1]
@@ -618,7 +662,7 @@ def process():
         df_owner = df[['TERMINALNO', 'TRIP_ID']].groupby(['TERMINALNO']).count().reset_index()
         df_owner.rename(columns={'TRIP_ID':'counts'}, inplace = True)
         df_base = df_owner.iloc[:,:1]
-        df_feature = makefeature1(f,df,df_base,df_owner)
+        df_feature = makefeature(fcl,df,df_base,df_owner)
         t = featureselected(f,df_base,df_feature)
         X_test = t.iloc[:,1:]
         X_train.fillna(0, inplace = True)
