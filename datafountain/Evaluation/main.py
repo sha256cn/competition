@@ -26,12 +26,11 @@ path_train = "/data/dm/train.csv"  # 训练文件
 path_test = "/data/dm/test.csv"  # 测试文件
 pay = 0.3 #赔付率阈值
 cv = 0
-fcl = {'tfc' : 12, 'sfc' : 3, 'hfc' : 5, 'lfc' : 4, 'cfc' : 3} #特征选择参数
-fs = {'p1':['tfc4', 'tfc12__14', 'tfc12__0', 'tfc12__14', 'tfc12__22', 'tfc12__21', 'hfc3'],
-      'p2':['tfc4','tfc12','hfc3'],
-      'p3':['tfc4', 'tfc12__14', 'tfc12__0', 'tfc12__14', 'tfc12__22', 'tfc12__21', 'hfc3','cfc2'],
-      'p4':['tfc4','tfc12','hfc3','hfc5'],}#特征方案
-# fs = {'p1' : ['tfc1']}
+fcl = {'tfc' : 13, 'sfc' : 3, 'hfc' : 5, 'lfc' : 4, 'cfc' : 3} #特征选择参数
+fs = {'p1':['tfc6', 'tfc12', 'tfc13', 'hfc3'],
+      'p2':['tfc6', 'tfc12', 'tfc13', 'hfc3','sfc3'],
+      'p3':['tfc6', 'tfc12', 'tfc13', 'hfc3','cfc3']}#特征方案
+fs = {'p1' : ['tfc1','tfc6','tfc13_1','tfc12__4','lfc3']}
 afl = ['tfc1_mean', 'tfc1_std', 'tfc2_mean', 'tfc2_std', 'tfc3_mean', 'tfc3_std', 'tfc4_mean', 
        'tfc4_std', 'tfc5_mean', 'tfc5_std', 'tfc6_mean', 'tfc6_std', 'tfc7_max', 'tfc7_mean', 
        'tfc7_min', 'tfc7_std', 'tfc7_pc1', 'tfc7_pc2', 'tfc8_mean', 'tfc8_std', 'tfc9_mean', 
@@ -145,9 +144,10 @@ def tfc5(df,df_base):#周六、日出行时长tats1值
     func = globals().get(statsf)
     return func(t1,df_base,'hour',pre,tci)
 
-def tfc6(df,df_base):#周一和周五出行时长stats1值
+def tfc6(df,df_base):#周一和周五上班高峰出行时长stats1值
     pre = sys._getframe().f_code.co_name + '_'
     t1 = df[(df['weekday'].isin([0,4]))]
+    t1 = t1[(df['hour'].isin([7,8,9,17,18]))]
     t1 = t1.groupby(['TERMINALNO','month','day'])['hour'].count().reset_index()
     func = globals().get(statsf)
     return func(t1,df_base,'hour',pre,tci)
@@ -168,33 +168,33 @@ def tfc8(df,df_base):#周六、日出行频率stats1值
     func = globals().get(statsf)
     return func(t1,df_base,'hour',pre,tci)
 
-def tfc9(df,df_base):#上班高峰期（8，9，17,18）出行概率stats1值
+def tfc9(df,df_base):#上班高峰期（7,8，9，17,18）出行概率stats1值
     pre = sys._getframe().f_code.co_name + '_'
     t1 = df[(df['weekday'] < 5)]
     t2 = t1.groupby(['TERMINALNO','month','day'])['hour'].count().reset_index()
-    t1 = t1[(df['hour'].isin([8,9,17,18]))]
+    t1 = t1[(df['hour'].isin([7,8,9,17,18]))]
     t3 = t1.groupby(['TERMINALNO','month','day'])['hour'].count().reset_index()
     t1 = pd.merge(t2, t3, how='left', on=['TERMINALNO','month','day'])
     t1['ratio1'] = t1['hour_y']/t1['hour_x']
     func = globals().get(statsf)
     return func(t1,df_base,'ratio1',pre,tci)
 
-def tfc10(df,df_base):#凌晨（1，2,3,4）出行概率stats1值
+def tfc10(df,df_base):#凌晨（0,1，2,3,4）出行概率stats1值
     pre = sys._getframe().f_code.co_name + '_'
     t1 = df
     t2 = t1.groupby(['TERMINALNO','month','day'])['hour'].count().reset_index()
-    t1 = t1[(df['hour'].isin([1,2,3,4]))]
+    t1 = t1[(df['hour'].isin([0,1,2,3,4]))]
     t3 = t1.groupby(['TERMINALNO','month','day'])['hour'].count().reset_index()
     t1 = pd.merge(t2, t3, how='left', on=['TERMINALNO','month','day'])
     t1['ratio1'] = t1['hour_y']/t1['hour_x']
     func = globals().get(statsf)
     return func(t1,df_base,'ratio1',pre,tci)
 
-def tfc11(df,df_base):#晚餐后（20,21,22,23,0）出行概率stats1值
+def tfc11(df,df_base):#晚餐后（20,21,22,23）出行概率stats1值
     pre = sys._getframe().f_code.co_name + '_'
     t1 = df
     t2 = t1.groupby(['TERMINALNO','month','day'])['hour'].count().reset_index()
-    t1 = t1[(df['hour'].isin([20,21,22,23,0]))]
+    t1 = t1[(df['hour'].isin([20,21,22,23]))]
     t3 = t1.groupby(['TERMINALNO','month','day'])['hour'].count().reset_index()
     t1 = pd.merge(t2, t3, how='left', on=['TERMINALNO','month','day'])
     t1['ratio1'] = t1['hour_y']/t1['hour_x']
@@ -209,6 +209,64 @@ def tfc12(df,df_base):#周一至周五24小时出行比率
     t1 = t1.drop(['hour','ratio'], axis=1)
     t1 = pd.merge(df_base, t1, how='left', on=['TERMINALNO'])
     return t1
+
+def tfc13(df,df_base):#按每次trip_id进行统计
+    head = sys._getframe().f_code.co_name + '_'
+    t1 = df.groupby(['TERMINALNO','TRIP_ID']).agg({'LONGITUDE':{'flo':'first','llo':'last'},
+                                              'LATITUDE':{'fla':'first','lla':'last'},
+                                              'HEIGHT':{'hmean':np.mean,'hstd':np.std,'hmax':np.max,'hmin':np.min},
+                                              'TIME':{'ft':'first','lt':'last'},
+                                              'DIRECTION':{'dmean':np.mean,'dstd':np.std},
+                                              'SPEED':{'smean':np.mean,'sstd':np.std}})
+    levels = t1.columns.levels
+    labels = t1.columns.labels
+    t1.columns = levels[1][labels[1]]
+    t1 = t1.reset_index()
+    t1['lo'] = ((t1['fla'] - t1['lla']).abs() + (t1['flo'] - t1['llo']).abs())*100
+    t1['tspan'] = (t1['lt'] - t1['ft'])/60
+    t1['hsub'] = t1['hmax'] - t1['hmin']
+    t1[['hmean', 'hstd','dmean','dstd','smean','sstd','lo','hsub']] = t1[['hmean', 'hstd','dmean','dstd','smean','sstd','lo','hsub']].astype(np.float32)
+    t1[['tspan','TRIP_ID']] = t1[['tspan','TRIP_ID']].astype(np.uint32)
+    t1['lt'] = t1['lt'].apply(lambda x: time.strftime('%Y-%m-%d %H:%M:%S',time.localtime(x)))
+    t1['lt'] = pd.to_datetime(t1['lt'])
+    t1['hour'] = t1['lt'].dt.hour.astype(np.uint8)
+    t1['weekday'] = t1['lt'].dt.weekday.astype(np.uint8)
+    t1['day'] = t1['lt'].dt.day.astype(np.uint8)
+    t1['month'] = t1['lt'].dt.month.astype(np.uint8)
+    t1 = t1.drop(['flo','llo','fla','lla','ft','lt','hmax','hmin'], axis=1)
+
+    func = globals().get(statsf)
+    pre = head + '11_' #周一至周五海拔极差
+    t2 = t1[(t1['weekday'] < 5)]
+    df_11 = func(t2,df_base,'hsub',pre,hci)
+
+    pre = head + '12_' #周六、周日海拔极差
+    t2 = t1[(t1['weekday'] >= 5)]
+    df_12 = func(t2,df_base,'hsub',pre,hci)
+
+    pre = head + '13_'#周一至周五上班高峰期（7,8，9，17,18）海拔极差
+    t2 = t1[(t1['weekday'] < 5)]
+    t2 = t2[(df['hour'].isin([7,8,9,17,18]))]
+    df_13 = func(t2,df_base,'hsub',pre,hci)
+
+    pre = head + '21_' #周一至周五连续行驶时间（5分钟之内的间隔）
+    t2 = t1[(t1['weekday'] < 5)]
+    df_21 = func(t2,df_base,'tspan',pre,tci)
+
+    pre = head + '22_' #周六、周日连续行驶时间（5分钟之内的间隔）
+    t2 = t1[(t1['weekday'] >= 5)]
+    df_22 = func(t2,df_base,'tspan',pre,tci)
+
+    t1 = pd.merge(df_base, df_11, how='left', on=['TERMINALNO'])
+    t1 = pd.merge(t1, df_12, how='left', on=['TERMINALNO'])
+    t1 = pd.merge(t1, df_13, how='left', on=['TERMINALNO'])    
+    t1 = pd.merge(t1, df_21, how='left', on=['TERMINALNO'])
+    t1 = pd.merge(t1, df_22, how='left', on=['TERMINALNO'])
+    # print(t1.columns)
+    return t1
+    
+
+
 
 #海拔特征
 def hfc1(df,df_base):#周一至周五出行海拔stats1值
@@ -276,8 +334,8 @@ def lfc1(df,df_base):#周一至周五出行区域stats1值
     pre = sys._getframe().f_code.co_name + '_'
     t1 = df[(df['weekday'] < 5)]
     t1 = t1.groupby(['TERMINALNO','month','day']).apply(
-        lambda x: (np.max(x['LONGITUDE']) - np.min(x['LONGITUDE'])) * 
-        (np.max(x['LATITUDE']) - np.min(x['LATITUDE']))).reset_index()
+        lambda x: (np.max(x['LONGITUDE']) - np.min(x['LONGITUDE']))*100 + 
+        (np.max(x['LATITUDE']) - np.min(x['LATITUDE']))*100).reset_index()
     t1.rename(columns={0:'area1'}, inplace = True)
     func = globals().get(statsf)
     return stats1(t1,df_base,'area1',pre,lci)
@@ -286,8 +344,8 @@ def lfc2(df,df_base):#周六、日出行区域stats1值
     pre = sys._getframe().f_code.co_name + '_'
     t1 = df[(df['weekday'] >= 5)]
     t1 = t1.groupby(['TERMINALNO','month','day']).apply(
-        lambda x: (np.max(x['LONGITUDE']) - np.min(x['LONGITUDE'])) * 
-        (np.max(x['LATITUDE']) - np.min(x['LATITUDE']))).reset_index()
+        lambda x: (np.max(x['LONGITUDE']) - np.min(x['LONGITUDE']))*100 + 
+        (np.max(x['LATITUDE']) - np.min(x['LATITUDE']))*100).reset_index()
     t1.rename(columns={0:'area1'}, inplace = True)
     func = globals().get(statsf)
     return stats1(t1,df_base,'area1',pre,lci)
@@ -296,8 +354,8 @@ def lfc3(df,df_base):#出行区域stats1值
     pre = sys._getframe().f_code.co_name + '_'
     t1 = df
     t1 = t1.groupby(['TERMINALNO','month','day']).apply(
-        lambda x: (np.max(x['LONGITUDE']) - np.min(x['LONGITUDE'])) * 
-        (np.max(x['LATITUDE']) - np.min(x['LATITUDE']))).reset_index()
+        lambda x: (np.max(x['LONGITUDE']) - np.min(x['LONGITUDE']))*100 + 
+        (np.max(x['LATITUDE']) - np.min(x['LATITUDE']))*100).reset_index()
     t1.rename(columns={0:'area1'}, inplace = True)
     # func = globals().get(statsf)
     return stats1(t1,df_base,'area1',pre,lci)
@@ -308,7 +366,7 @@ def lfc4(df,df_base):#按天计算经纬极差,再按车主计算极差的stats1
     t2 = t1.groupby(['TERMINALNO','month','day'])['LONGITUDE'].agg(lambda x:max(x)-min(x)).reset_index()
     t3 = t1.groupby(['TERMINALNO','month','day'])['LATITUDE'].agg(lambda x:max(x)-min(x)).reset_index()
     t1 = pd.merge(t2, t3, how='left', on=['TERMINALNO','month','day'])
-    t1['area1'] = t1['LONGITUDE']*t1['LATITUDE']
+    t1['area1'] = t1['LONGITUDE']*100 + t1['LATITUDE']*100
     return stats1(t1,df_base,'area1',pre,lci)
 
 #通话状态特征
@@ -362,6 +420,7 @@ def data_transformation(df):
     # df['rs'] = np.rint(df['SPEED']/10).astype(np.uint8)
     df = df[(df['month'] != 10) | ((df['month'] == 10) & (df['day'] > 9))]#排除国庆长假
     df = df[(df['month'] != 9) | ((df['month'] == 9) & ((df['day'] > 18) | (df['day'] < 15)))]#排除中秋
+
     df = df.sort_values(by = ['TERMINALNO','TIME'],axis = 0).reset_index(drop=True)
     df['stime'] = df['TIME'].shift(1)
     df['TRIP_ID'] = df['TIME'] - df['stime']
@@ -449,6 +508,7 @@ def ds(X,y,random):
     return X_train,X_test,y_train,y_test
 
 def train(X,y):
+    # print(X.columns)
     if cv == 1:
         X.fillna(0, inplace = True)
         params = {'n_estimators': 500, 'max_depth': 4,'learning_rate': 0.01, 'loss': 'ls'}
@@ -555,7 +615,7 @@ def score(fs,df_base,df_feature):
     for index,value in fs.items():
         for i,v in enumerate(value):
             for i1,v1 in enumerate(colums):
-                if (('_' in v) & (v1 == v)) | (('_' not in v) & (v1.startswith(ｖ+'_'))):
+                if (('_' in v) & (v1.startswith(ｖ))) | (('_' not in v) & (v1.startswith(ｖ+'_'))):
                     if first == False:
                         starti=i1
                         first = True
