@@ -116,7 +116,10 @@ def cal_ratio(df,col,pre):
     df_temp1 = df_temp1.groupby('TERMINALNO').sum().reset_index()
     return df_temp1
 
-# 时间特征
+# 时间特征:tfc1强特征
+'''
+feature:'tfc9','tfc10','tfc11','tfc4','hfc3','tfc1',gini:0.11162,tfc1为强特征,本次成绩采用stat2,stat1:0.09978
+'''
 def tfc1(df,df_base):#周一至周五出行时刻stats1值
     fname = sys._getframe().f_code.co_name
     pre = fname + '_'
@@ -177,7 +180,7 @@ def tfc7(df,df_base):#周一至周五出行频率stats1值
     t1 = t1.groupby(['TERMINALNO','month','day','hour'])['minute'].count().reset_index()
     t1 = t1.groupby(['TERMINALNO','month','day'])['hour'].count().reset_index()
     func = globals().get(statsf)
-    return stats1(t1,df_base,'hour',pre,tci)
+    return func(t1,df_base,'hour',pre,tci)
 
 def tfc8(df,df_base):#周六、日出行频率stats1值
     fname = sys._getframe().f_code.co_name
@@ -362,6 +365,28 @@ def tfc19(df,df_base):#周一至周五出行时刻按天mean值stats1值
     func = globals().get(statsf)
     return func(t1,df_base,'hour',pre,tci)
 
+def tfc20(df,df_base):#周一至周五出行不同时点数stats1值
+    fname = sys._getframe().f_code.co_name
+    pre = fname + '_'
+    mff[fname] = 1
+    l1 = pre + 'hc'
+
+    t1 = df[(df['weekday'] < 5)]
+    t1 = t1.groupby(['TERMINALNO','hour'])['TRIP_ID'].count().reset_index() 
+    t1 = t1.groupby(['TERMINALNO'])['hour'].agg({l1:'count'}).reset_index() 
+    t1 = pd.merge(df_base, t1, how='left', on=['TERMINALNO'])
+    return t1
+
+def tfc21(df,df_base):#周一至周五出行时刻按天sum值stats1值
+    fname = sys._getframe().f_code.co_name
+    pre = fname + '_'
+    mff[fname] = 1
+
+    t1 = df[(df['weekday'] < 5)]
+    t1 = t1.groupby(['TERMINALNO','month','day'])['hour'].sum().reset_index()
+    func = globals().get(statsf)
+    return func(t1,df_base,'hour',pre,tci)
+
 #海拔特征
 def hfc1(df,df_base):#周一至周五出行海拔stats1值
     fname = sys._getframe().f_code.co_name
@@ -369,7 +394,7 @@ def hfc1(df,df_base):#周一至周五出行海拔stats1值
     mff[fname] = 1
     t1 = df[(df['weekday'] < 5)]
     func = globals().get(statsf)
-    return stats1(t1,df_base,'HEIGHT',pre,hci)
+    return func(t1,df_base,'HEIGHT',pre,hci)
 
 def hfc2(df,df_base):#周六、日出行海拔stats1值
     fname = sys._getframe().f_code.co_name
@@ -785,7 +810,7 @@ def process():
             giniv1,mse1 = score1(df_sf.iloc[:,1:],df_feature['Y'])
             logging.info("gini:%f,mse:%f,feature:%s"%(giniv1,mse1,','.join(v1))) 
     else:
-        f = ['tfc9','tfc10','tfc11','tfc4','hfc3','tfc1']
+        f = ['tfc9','tfc10','tfc11','tfc4','hfc1','tfc1']
         logging.info("feature:%s"%(','.join(f))) 
         fl['p1'] = f
         df_feature = makefeature1(fl,df)
