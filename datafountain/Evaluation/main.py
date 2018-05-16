@@ -6,20 +6,18 @@ from pandas import Series,DataFrame
 import numpy as np
 import time
 from sklearn.ensemble import GradientBoostingRegressor
-from sklearn.linear_model import LinearRegression
+from sklearn.linear_model import LassoCV
 from sklearn import  feature_selection
+from sklearn.feature_selection import SelectFromModel
 from sklearn.preprocessing import StandardScaler
-from sklearn.metrics import r2_score,mean_absolute_error,mean_squared_error
+from sklearn.metrics import r2_score,mean_absolute_error,mean_squared_error,make_scorer
 import xgboost as xgb
-from xgboost import plot_importance
 from sklearn.preprocessing import Imputer
 import lightgbm as lgb
 from scipy import stats
-from sklearn.model_selection import train_test_split
-from sklearn.model_selection import cross_val_score
-from sklearn.model_selection import GridSearchCV
-import lightgbm as lgb
-from sklearn.model_selection import cross_val_predict
+from sklearn.model_selection import train_test_split,cross_val_score,GridSearchCV,cross_val_predict
+from scipy.special import boxcox1p
+from scipy.stats import skew,boxcox_normmax
 import warnings
 warnings.filterwarnings("ignore")
 
@@ -32,12 +30,15 @@ mparams = [{'n_estimators': 500, 'max_depth': 4,'learning_rate': 0.01, 'loss': '
            {'max_depth':6, 'learning_rate':0.01, 'n_estimators':500, 'silent':True, 'reg_lambda':1,'objective':'reg:linear'},
            {'boosting_type': "dart" , 'learning_rate':0.0021}]
 mff = {}#是否已生成特征
-fl = {'p1':['tfc9','tfc10','tfc11','tfc4','hfc3','tfc18'],
-      'p2':['tfc9','tfc10','tfc11','tfc4','hfc3','tfc1','tfc2'],
-      'p3':['tfc9','tfc10','tfc11','tfc4','hfc3','tfc1'],
-      'p4':['tfc9','tfc10','tfc11','tfc4','hfc3','tfc19'],
-      'p5':['tfc9','tfc10','tfc11','tfc15','tfc17','hfc3','tfc19']}#特征方案
-# fl = {'p1':['cfc4','tfc17','tfc18']}
+fl = {'p1':['tfc1'],
+      'p2':['hfc1'],
+      'p3':['hfc1','tfc1'],
+      'p4':['tfc4','tfc1'],
+      'p5':['tfc4','hfc1'],
+      'p6':['tfc10','tfc1','tfc4','hfc1'],
+      'p7':['tfc10','tfc1','tfc4','hfc1','hfc6'],
+      'p8':['tfc10','tfc1','tfc4','hfc6']}#特征方案
+fl = {'p1':['tfc9','tfc10','tfc11','tfc4','hfc3','tfc1']}
 afl = ['tfc1_mean', 'tfc1_std', 'tfc3_mean', 'tfc3_std', 'tfc4_mean', 'tfc4_std', 'tfc5_mean', 
        'tfc5_std', 'tfc6_mean', 'tfc6_std', 'tfc7_max', 'tfc7_mean', 'tfc7_min', 'tfc7_std', 
        'tfc7_pc1', 'tfc7_pc2', 'tfc8_mean', 'tfc8_std', 'tfc9_mean', 'tfc9_std', 'tfc10_mean', 
@@ -58,9 +59,9 @@ afl = ['tfc1_mean', 'tfc1_std', 'tfc3_mean', 'tfc3_std', 'tfc4_mean', 'tfc4_std'
        'lfc3_pc2', 'lfc4_max', 'lfc4_mean', 'lfc4_min', 'lfc4_std', 'lfc4_pc1', 'lfc4_pc2', 'cfc1_cs1', 
        'cfc2_cs1', 'cfc3_cs3']
 afl = ['tfc1','tfc2','tfc3','tfc4','tfc5','tfc6','tfc7','tfc8','tfc9','tfc10',
-       'tfc11','tfc12','tfc13','tfc14','tfc15','tfc16','hfc1','hfc2','hfc3',
-       'hfc4','hfc5','hfc6','sfc1','sfc2','sfc3','lfc1','lfc2','lfc3','lfc4',
-       'cfc1','cfc2','cfc3','cfc4']
+       'tfc11','tfc12','tfc13','tfc14','tfc15','tfc16','tfc17','tfc18','tfc19',
+       'tfc20','hfc1','hfc2','hfc3','hfc4','hfc5','hfc6','sfc1','sfc2','sfc3',
+       'lfc1','lfc2','lfc3','lfc4','cfc1','cfc2','cfc3','cfc4']
 
 istrain = 0
 mn = 0
@@ -118,7 +119,9 @@ def cal_ratio(df,col,pre):
 
 # 时间特征:tfc1强特征
 '''
-feature:'tfc9','tfc10','tfc11','tfc4','hfc3','tfc1',gini:0.11162,tfc1为强特征,本次成绩采用stat2,stat1:0.09978
+feature:'tfc9','tfc10','tfc11','tfc4','hfc3','tfc1',gini:0.11162,本次成绩采用stat2,stat1:0.09978
+feature:'tfc9','tfc10','tfc11','tfc4','hfc1','tfc1',gini:0.13679,tfc1为强特征,统计量均采用stat2
+feature:'tfc9','tfc10','tfc11','tfc4','hfc7','tfc1',gini:0.14528
 '''
 def tfc1(df,df_base):#周一至周五出行时刻stats1值
     fname = sys._getframe().f_code.co_name
@@ -145,7 +148,7 @@ def tfc3(df,df_base):#周一和周五出行时刻stats1值
     func = globals().get(statsf)
     return func(t1,df_base,'hour',pre,tci)
 
-def tfc4(df,df_base):#周一至周五出行时长stats值
+def tfc4(df,df_base):#周一至周五按天出行时长stats值
     fname = sys._getframe().f_code.co_name
     pre = fname + '_'
     mff[fname] = 1
@@ -192,7 +195,7 @@ def tfc8(df,df_base):#周六、日出行频率stats1值
     func = globals().get(statsf)
     return func(t1,df_base,'hour',pre,tci)
 
-def tfc9(df,df_base):#上班高峰期（7,8，9，17,18）出行占比stats1值
+def tfc9(df,df_base):#周一至周五按天上班高峰期（7,8，9，17,18）出行占比stats1值
     fname = sys._getframe().f_code.co_name
     pre = fname + '_'
     mff[fname] = 1
@@ -387,6 +390,79 @@ def tfc21(df,df_base):#周一至周五出行时刻按天sum值stats1值
     func = globals().get(statsf)
     return func(t1,df_base,'hour',pre,tci)
 
+def tfc22(df,df_base):#周一至周五出行加权时刻
+    fname = sys._getframe().f_code.co_name
+    pre = fname + '_'
+    mff[fname] = 1
+    t1 = df[(df['weekday'] < 5)]
+    t2 = t1.groupby(['TERMINALNO','hour'])['TRIP_ID'].agg({'ts1':'count'}).reset_index()
+    t3 = t1.groupby(['TERMINALNO'])['hour'].agg({'ts2':'count'}).reset_index()
+    t1 = pd.merge(t2, t3, how='left', on=['TERMINALNO'])
+    t1['hr']=t1['hour']*(t1['ts1']/t1['ts2'])
+    func = globals().get(statsf)
+    return func(t1,df_base,'hr',pre,tci)
+
+def tfc23(df,df_base):#周一至周五上班高峰期（7,8，9，17,18）出行占比stats1值
+    fname = sys._getframe().f_code.co_name
+    pre = fname + '_'
+    mff[fname] = 1
+    l1 = pre + 'tr'
+    t1 = df[(df['weekday'] < 5)]
+    t2 = t1.groupby(['TERMINALNO'])['hour'].count().reset_index()
+    t1 = t1[(df['hour'].isin([7,8,9,17,18]))]
+    t3 = t1.groupby(['TERMINALNO'])['hour'].count().reset_index()
+    t1 = pd.merge(t2, t3, how='left', on=['TERMINALNO'])
+    t1[l1] = t1['hour_y']/t1['hour_x']
+    t1 = pd.merge(df_base, t1, how='left', on=['TERMINALNO'])
+    return t1[['TERMINALNO',l1]]
+
+def tfc24(df,df_base):#凌晨（0,1，2,3,4）出行占比stats1值
+    fname = sys._getframe().f_code.co_name
+    pre = fname + '_'
+    mff[fname] = 1
+    l1 = pre + 'tr'
+    t1 = df
+    t2 = t1.groupby(['TERMINALNO'])['hour'].count().reset_index()
+    t1 = t1[(df['hour'].isin([0,1,2,3,4]))]
+    t3 = t1.groupby(['TERMINALNO'])['hour'].count().reset_index()
+    t1 = pd.merge(t2, t3, how='left', on=['TERMINALNO'])
+    t1[l1] = t1['hour_y']/t1['hour_x']
+    t1 = pd.merge(df_base, t1, how='left', on=['TERMINALNO'])
+    return t1[['TERMINALNO',l1]]
+
+def tfc25(df,df_base):#晚餐后（20,21,22,23）出行占比stats1值
+    fname = sys._getframe().f_code.co_name
+    pre = fname + '_'
+    mff[fname] = 1
+    l1 = pre + 'tr'
+    t1 = df
+    t2 = t1.groupby(['TERMINALNO'])['hour'].count().reset_index()
+    t1 = t1[(df['hour'].isin([20,21,22,23]))]
+    t3 = t1.groupby(['TERMINALNO'])['hour'].count().reset_index()
+    t1 = pd.merge(t2, t3, how='left', on=['TERMINALNO'])
+    t1[l1] = t1['hour_y']/t1['hour_x']
+    t1 = pd.merge(df_base, t1, how='left', on=['TERMINALNO'])
+    return t1[['TERMINALNO',l1]]
+
+def tfc26(df,df_base):#周一至周五，按天统计最早及最晚出行时刻
+    fname = sys._getframe().f_code.co_name
+    pre = fname + '_'
+    mff[fname] = 1
+    l1 = pre + 'hminm'
+    l2 = pre + 'hminstd'
+    l3 = pre + 'hmaxm'
+    l4 = pre + 'hmaxstd'
+
+    t1 = df[(df['weekday'] < 5)]
+    t1 = t1.groupby(['TERMINALNO','month','day'])['hour'].agg({'hmin':'min','hmax':'max'}).reset_index()
+    t1 = t1.groupby(['TERMINALNO']).agg({'hmin':{l1:'mean',l2:'std'},'hmax':{l3:'mean',l4:'std'}}) 
+    levels = t1.columns.levels
+    labels = t1.columns.labels
+    t1.columns = levels[1][labels[1]]
+    t1 = t1.reset_index()
+    t1 = pd.merge(df_base, t1, how='left', on=['TERMINALNO'])
+    return t1
+
 #海拔特征
 def hfc1(df,df_base):#周一至周五出行海拔stats1值
     fname = sys._getframe().f_code.co_name
@@ -434,7 +510,8 @@ def hfc5(df,df_base):#按天计算海拔极差,再按车主计算极差的均值
     t1 = df
     t1 = t1.groupby(['TERMINALNO','month','day'])['HEIGHT'].agg(lambda x:max(x)-min(x)).reset_index()
     # t1 = t1.groupby(['TERMINALNO'])['HEIGHT'].agg({l1:np.mean,l2:np.std}).reset_index()
-    return stats1(t1,df_base,'HEIGHT',pre,lci)
+    func = globals().get(statsf)
+    return func(t1,df_base,'HEIGHT',pre,lci)
 
 def hfc6(df,df_base):#周一至周五，上班高峰时间海拔极差
     fname = sys._getframe().f_code.co_name
@@ -446,6 +523,15 @@ def hfc6(df,df_base):#周一至周五，上班高峰时间海拔极差
     func = globals().get(statsf)
     return func(t1,df_base,'HEIGHT',pre,hci)
 
+def hfc7(df,df_base):#周一至周五按天出行海拔stats1值
+    fname = sys._getframe().f_code.co_name
+    pre = fname + '_'
+    mff[fname] = 1
+    t1 = df[(df['weekday'] < 5)]
+    t1 = t1.groupby(['TERMINALNO','month','day'])['HEIGHT'].mean().reset_index()
+    func = globals().get(statsf)
+    return func(t1,df_base,'HEIGHT',pre,hci)
+
 #速度特征
 def sfc1(df,df_base):#周一至周五出行速度stats1值
     fname = sys._getframe().f_code.co_name
@@ -454,7 +540,7 @@ def sfc1(df,df_base):#周一至周五出行速度stats1值
     t1 = df[(df['weekday'] < 5)]
     t1 = t1[(t1['SPEED'] > 0)]
     func = globals().get(statsf)
-    return stats1(t1,df_base,'SPEED',pre,sci)
+    return func(t1,df_base,'SPEED',pre,sci)
 
 def sfc2(df,df_base):#周六、日出行速度stats1值
     fname = sys._getframe().f_code.co_name
@@ -471,8 +557,8 @@ def sfc3(df,df_base):#出行速度stats1值
     mff[fname] = 1
     t1 = df
     t1 = t1[(t1['SPEED'] > 0)]
-    # func = globals().get(statsf)
-    return stats1(t1,df_base,'SPEED',pre,sci)
+    func = globals().get(statsf)
+    return func(t1,df_base,'SPEED',pre,sci)
 
 def sfc4(df,df_base):#凌晨出行速度stats1值
     fname = sys._getframe().f_code.co_name
@@ -494,7 +580,7 @@ def lfc1(df,df_base):#周一至周五出行区域stats1值
         (np.max(x['LATITUDE']) - np.min(x['LATITUDE']))*100).reset_index()
     t1.rename(columns={0:'area1'}, inplace = True)
     func = globals().get(statsf)
-    return stats1(t1,df_base,'area1',pre,lci)
+    return func(t1,df_base,'area1',pre,lci)
 
 def lfc2(df,df_base):#周六、日出行区域stats1值
     fname = sys._getframe().f_code.co_name
@@ -506,7 +592,7 @@ def lfc2(df,df_base):#周六、日出行区域stats1值
         (np.max(x['LATITUDE']) - np.min(x['LATITUDE']))*100).reset_index()
     t1.rename(columns={0:'area1'}, inplace = True)
     func = globals().get(statsf)
-    return stats1(t1,df_base,'area1',pre,lci)
+    return func(t1,df_base,'area1',pre,lci)
 
 def lfc3(df,df_base):#出行区域stats1值
     fname = sys._getframe().f_code.co_name
@@ -517,8 +603,8 @@ def lfc3(df,df_base):#出行区域stats1值
         lambda x: (np.max(x['LONGITUDE']) - np.min(x['LONGITUDE']))*100 + 
         (np.max(x['LATITUDE']) - np.min(x['LATITUDE']))*100).reset_index()
     t1.rename(columns={0:'area1'}, inplace = True)
-    # func = globals().get(statsf)
-    return stats1(t1,df_base,'area1',pre,lci)
+    func = globals().get(statsf)
+    return func(t1,df_base,'area1',pre,lci)
 
 def lfc4(df,df_base):#按天计算经纬极差,再按车主计算极差的stats1值
     fname = sys._getframe().f_code.co_name
@@ -529,7 +615,8 @@ def lfc4(df,df_base):#按天计算经纬极差,再按车主计算极差的stats1
     t3 = t1.groupby(['TERMINALNO','month','day'])['LATITUDE'].agg(lambda x:max(x)-min(x)).reset_index()
     t1 = pd.merge(t2, t3, how='left', on=['TERMINALNO','month','day'])
     t1['area1'] = t1['LONGITUDE']*100 + t1['LATITUDE']*100
-    return stats1(t1,df_base,'area1',pre,lci)
+    func = globals().get(statsf)
+    return func(t1,df_base,'area1',pre,lci)
 
 #通话状态特征
 def cfc1(df,df_base):#根据样本数据状态不为0,4为筛选值
@@ -607,7 +694,6 @@ def cfc4(df,df_base):#按tripid统计callstate的时长，比率
     t1 = pd.merge(df_base, t1[['TERMINALNO',l1,l2,l3,l4]], how='left', on=['TERMINALNO'])
     logging.debug(t1.columns) 
     return t1
-    
 
 def transdata1(df):
     df['ftime'] = df['TIME'].apply(lambda x: time.strftime('%Y-%m-%d %H:%M:%S',time.localtime(x)))
@@ -663,6 +749,8 @@ def gini(actual, pred):
     giniSum -= (len(actual) + 1) / 2
     return giniSum / len(actual)
 
+gini_score = make_scorer(gini, greater_is_better=True)
+
 def makefeature1(fs,df):
     if "Y" in df.columns.tolist():
         df_owner = df[['TERMINALNO','Y','TRIP_ID']].groupby(['TERMINALNO','Y']).count().reset_index()
@@ -676,6 +764,13 @@ def makefeature1(fs,df):
                 dfn = func(df,df_owner.iloc[:,:1])
                 df_owner = pd.merge(df_owner, dfn, how='left', on=['TERMINALNO'])
     logging.debug(df_owner.columns)
+    #以下使数值特征正态化
+    # df_owner['Y'] = boxcox1p(df_owner['Y'] , boxcox_normmax(df_owner['Y']+1))
+    # numeric_feats = df_owner.dtypes[df_owner.dtypes != "object"].index
+    # skewed_feats = df_owner[numeric_feats].apply(lambda x: skew(x.dropna()))
+    # skewed_feats = skewed_feats[skewed_feats > 0.75]
+    # skewed_feats = skewed_feats.index
+    # df_owner[skewed_feats] = np.log1p(df_owner[skewed_feats])
     return df_owner
 
 def selectfeature1(fs,df_feature): 
@@ -702,6 +797,16 @@ def selectfeature1(fs,df_feature):
     logging.debug(t.columns)
     return t
 
+def gs1(X,y):
+    if mn == 0:
+        X.fillna( 0, inplace = True )
+        param1 = {'max_depth':range(3,8,1), 'min_samples_split':range(200,801,200)}
+        model = GradientBoostingRegressor(n_estimators = 500,learning_rate = 0.01, random_state = 1976)
+        gs = GridSearchCV(model,param1,scoring = gini_score,cv = 5)
+        gs.fit(X,y)
+        logging.info(gs.best_params_)
+        logging.info(gs.best_score_)
+
 def predict1(X_train,y_train,X_test):
     # skewed_features = X_train.skew(axis = 0)
     # skewed_features = skewed_features[np.abs(skewed_features)>0.5]
@@ -717,13 +822,37 @@ def predict1(X_train,y_train,X_test):
         model = GradientBoostingRegressor(**mparams[mn])
     elif mn == 1:
         model = xgb.XGBRegressor(**mparams[mn])
+    elif mn == 2:
+        # model = LassoCV(alphas = [1, 0.1, 0.001, 0.0005])
+        model = LassoCV(cv=10)
+        # model = SelectFromModel(model, threshold=0.25)
+        #以下采用两种方式进行数值数据标准化
+        y_train = boxcox1p(y_train , boxcox_normmax(y_train+1))
+        # numeric_feats = X_train.dtypes[X_train.dtypes != "object"].index
+        # skewed_feats = X_train[numeric_feats].apply(lambda x: skew(x.dropna()))
+        # skewed_feats = skewed_feats[skewed_feats > 0.75]
+        # skewed_feats = skewed_feats.index
+        # X_train[skewed_feats] = np.log1p(X_train[skewed_feats])
+        # X_test[skewed_feats] = np.log1p(X_test[skewed_feats])
+        X_train = X_train.fillna(X_train.mean())
+        X_test = X_test.fillna(X_test.mean())
+
+        ss_X = StandardScaler()
+        ss_y = StandardScaler()
+        X_train = ss_X.fit_transform(X_train)
+        X_test = ss_X.transform(X_test)
+        # y_train = ss_y.fit_transform(y_train.reshape(-1, 1))
+
     else:
         model = lgb.LGBMRegressor(**mparams[mn])
     if cv == 1:
         pred = cross_val_predict(model,X_train,y_train,cv=10)
     else:
-        model.fit(X_train.values, y_train)
-        pred = model.predict(X_test.values)
+        model.fit(X_train, y_train)
+        pred = model.predict(X_test)
+    # if mn == 2:
+    #     coef = pd.Series(model.coef_, index = X_train.columns)
+    #     logging.info(coef.sort_values().head(38)) 
     return pred
 
 def fsbymodel1(X_train,y_train):
@@ -738,7 +867,6 @@ def fsbymodel1(X_train,y_train):
         if c > 38:
             break
         # logging.info(feature_name[i]+':'+str(feature_importance[i]))
-        print(feature_name[i])
         c = c+1
 
 def score1(X,y):
@@ -799,18 +927,19 @@ def process():
     if istrain == 1:
         # fl['p1'] = afl
         df_feature = makefeature1(fl,df)
-        # df_sf = selectfeature1(afl,df_feature)
-        # X_train = df_sf.iloc[:,1:]
-        # y_train = df_feature['Y']
+        df_sf = selectfeature1(afl,df_feature) 
+        X_train = df_sf.iloc[:,1:]
+        y_train = df_feature['Y']
+        gs1(X_train,y_train)
         # fsbymodel1(X_train,y_train)
         # testfeature1(afl,['sfc2','lfc2','tfc2','tfc13','tfc16','cfc3','tfc11'],0.0655,df_feature)
-        for i1,v1 in fl.items():
-            df_sf = selectfeature1(v1,df_feature)
-            logging.debug(df_sf.columns.tolist())
-            giniv1,mse1 = score1(df_sf.iloc[:,1:],df_feature['Y'])
-            logging.info("gini:%f,mse:%f,feature:%s"%(giniv1,mse1,','.join(v1))) 
+        # for i1,v1 in fl.items():
+        #     df_sf = selectfeature1(v1,df_feature)
+        #     logging.debug(df_sf.columns.tolist())
+        #     giniv1,mse1 = score1(df_sf.iloc[:,1:],df_feature['Y'])
+        #     logging.info("gini:%f,mse:%f,feature:%s"%(giniv1,mse1,','.join(v1))) 
     else:
-        f = ['tfc9','tfc10','tfc11','tfc4','hfc1','tfc1']
+        f = ['tfc9','tfc10','tfc11','tfc4','hfc7','tfc1']
         logging.info("feature:%s"%(','.join(f))) 
         fl['p1'] = f
         df_feature = makefeature1(fl,df)
