@@ -5,7 +5,7 @@ import logging
 from pandas import Series,DataFrame
 import numpy as np
 import time
-from sklearn.ensemble import GradientBoostingRegressor
+from sklearn.ensemble import GradientBoostingRegressor,RandomForestRegressor
 from sklearn.linear_model import LassoCV
 from sklearn import  feature_selection
 from sklearn.feature_selection import SelectFromModel
@@ -60,8 +60,8 @@ afl = ['tfc1','tfc2','tfc3','tfc4','tfc5','tfc6','tfc7','tfc8','tfc9','tfc10',
        'tfc20','hfc1','hfc2','hfc3','hfc4','hfc5','hfc6','sfc1','sfc2','sfc3',
        'lfc1','lfc2','lfc3','lfc4','cfc1','cfc2','cfc3','cfc4']
 
-istrain = 0 
-mn = 0
+istrain = 0
+mn = 3
 dfn = 'df_tfc1'
 statsf = 'stats2'
 hci = 0.8
@@ -802,7 +802,7 @@ def transdata1(df):
             ts[i1] = ts[i1-1]
     df = df.drop(['stime'], axis=1)
     df['TRIP_ID'] = ts
-
+    
 def output(df):
     temp = df[['TERMINALNO', 'Y']].sort_values(by='Y', axis=0, ascending=True)
     temp.rename(columns={'TERMINALNO': 'Id', 'Y': 'Pred'}, inplace=True)
@@ -924,7 +924,21 @@ def predict1(X_train,y_train,X_test):
         X_train = ss_X.fit_transform(X_train)
         X_test = ss_X.transform(X_test)
         # y_train = ss_y.fit_transform(y_train.reshape(-1, 1))
-
+    elif mn == 3:
+        X_train.fillna(0, inplace = True)
+        X_test.fillna(0, inplace = True)
+        t = pd.concat([y_train,X_train], axis=1)
+        df_pay = t[t['Y'] > 0]
+        t = pd.concat([t,df_pay,df_pay,df_pay,df_pay,df_pay,df_pay,df_pay],axis=0)
+        X_train = t.iloc[:,1:]
+        y_train = t['Y']
+        model1 = GradientBoostingRegressor(n_estimators=300, max_depth=3, min_samples_split=10, learning_rate=0.01, loss='ls')
+        model2 = RandomForestRegressor(n_estimators=1300, max_features = 0.5, min_samples_leaf=30,random_state=1)
+        model1.fit(X_train, y_train)
+        pred1 = model1.predict(X_test)
+        model2.fit(X_train, y_train)
+        pred2 = model2.predict(X_test)
+        return (pred1+pred2)/2
     else:
         model = lgb.LGBMRegressor(**mparams[mn])
     if cv == 1:
@@ -1021,7 +1035,7 @@ def process():
             giniv1,mse1 = score1(df_sf.iloc[:,1:],df_feature['Y'])
             logging.info("gini:%f,mse:%f,feature:%s"%(giniv1,mse1,','.join(v1))) 
     else:
-        f = ['tfc9','tfc10','tfc11','tfc4','hfc7','tfc31']
+        f = ['tfc9','tfc10','tfc11','tfc4','hfc7','tfc1'] # 需要在test data上执行的特征组合
         logging.info("feature:%s"%(','.join(f))) 
         fl['p1'] = f
         df_feature = makefeature1(fl,df)
