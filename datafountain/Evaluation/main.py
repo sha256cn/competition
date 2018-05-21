@@ -15,7 +15,7 @@ import xgboost as xgb
 from sklearn.preprocessing import Imputer
 import lightgbm as lgb
 from scipy import stats
-from sklearn.model_selection import train_test_split,cross_val_score,GridSearchCV,cross_val_predict
+from sklearn.model_selection import train_test_split,cross_val_score,GridSearchCV,cross_val_predict,KFold
 from scipy.special import boxcox1p
 from scipy.stats import skew,boxcox_normmax
 import warnings
@@ -26,42 +26,64 @@ path_train = "/data/dm/train.csv"  # 训练文件
 path_test = "/data/dm/test.csv"  # 测试文件
 pay = 0.3 #赔付率阈值
 cv = 0
+
 mparams = [{'n_estimators': 500, 'max_depth': 4,'learning_rate': 0.01, 'loss': 'ls','random_state':1976},
            {'max_depth':4, 'learning_rate':0.005, 'n_estimators':1000, 'silent':True, 'objective':'reg:linear'},
-           {'boosting_type': "dart" , 'learning_rate':0.0021}]
+           {'boosting_type': "dart" , 'learning_rate':0.0021},
+           {'n_estimators' : 1300, 'max_features' : 0.5, 'min_samples_leaf' : 30,'random_state' : 1}]
 mff = {}#是否已生成特征
-fl = {'p1':['tfc9','tfc10','tfc11','tfc4','hfc7','tfc1'],
-      'p2':['tfc9','tfc28','tfc29','tfc4','hfc7','tfc1'],
-      'p3':['tfc9','tfc28','tfc29','tfc4','hfc7','tfc1','hfc2'],
-      'p4':['tfc9','tfc10','tfc11','tfc4','hfc7','tfc30'],
-      'p5':['tfc9','tfc10','tfc11','tfc4','hfc7','tfc31']}#特征方案
+fl = {'p1':['tfc1','tfc4','tfc9','tfc10','tfc11','hfc7','lfc5'],#adddata=0,0.13455
+      'p2':['tfc1','tfc4','tfc9','tfc10','tfc11','hfc7','tfc27'],#adddata=0,0.14707
+      'p3':['tfc1','tfc4','tfc9','tfc10','tfc11','hfc1','sfc1'],#adddata=0,0.10581
+      'p4':['tfc1','tfc4','tfc9','tfc10','tfc11','hfc7','tfc21'],#adddata=0,0.13099,adddata=2,0.14909
+      'p5':['tfc1','tfc4','tfc9','tfc10','tfc11','hfc7','tfc21','tfc24','tfc30'],#adddata=2,0.16267
+      'p6':['tfc1','tfc4','tfc9','tfc10','tfc11','hfc7','cfc4'],#adddata=0,0.12327
+      'p7':['tfc1','tfc4','tfc9','tfc10','tfc11','hfc7','hfc1'],
+      'p8':['tfc1','tfc4','tfc9','tfc10','tfc11','hfc7','cfc3'],#adddata=0,0.14537
+      'p9':['tfc1','tfc4','tfc9','tfc10','tfc11','hfc7','sfc1','sfc4']}
 # fl = {'p1':['tfc9','tfc10','tfc11','tfc4','hfc3','tfc1']}
-afl = ['tfc1_mean', 'tfc1_std', 'tfc3_mean', 'tfc3_std', 'tfc4_mean', 'tfc4_std', 'tfc5_mean', 
-       'tfc5_std', 'tfc6_mean', 'tfc6_std', 'tfc7_max', 'tfc7_mean', 'tfc7_min', 'tfc7_std', 
-       'tfc7_pc1', 'tfc7_pc2', 'tfc8_mean', 'tfc8_std', 'tfc9_mean', 'tfc9_std', 'tfc10_mean', 
-       'tfc10_std', 'tfc11_mean', 'tfc11_std', 'tfc13_11_mean', 'tfc13_11_std', 'tfc13_12_mean', 
-       'tfc13_12_std', 'tfc13_13_mean', 'tfc13_13_std', 'tfc13_21_mean', 'tfc13_21_std', 'tfc13_22_mean',
-       'tfc13_22_std', 'tfc14__0', 'tfc14__1', 'tfc14__2', 'tfc14__3', 'tfc14__4', 'tfc14__5', 'tfc14__6', 
-       'tfc14__7', 'tfc14__8', 'tfc14__9', 'tfc14__10', 'tfc14__11', 'tfc14__12', 'tfc14__13', 'tfc14__14',
-       'tfc14__15', 'tfc14__16', 'tfc14__17', 'tfc14__18', 'tfc14__19', 'tfc14__20', 'tfc14__21', 
-       'tfc14__22', 'tfc14__23', 'tfc15_mean', 'tfc15_std', 'tfc16_mean', 'tfc16_std', 'hfc1_max', 
-       'hfc1_mean', 'hfc1_min', 'hfc1_std', 'hfc1_pc1', 'hfc1_pc2', 'hfc2_max', 'hfc2_mean', 'hfc2_min',
-       'hfc2_std', 'hfc2_pc1', 'hfc2_pc2', 'hfc3_max', 'hfc3_mean', 'hfc3_min', 'hfc3_std', 'hfc3_pc1', 
-       'hfc3_pc2', 'hfc5_max', 'hfc5_mean', 'hfc5_min', 'hfc5_std', 'hfc5_pc1', 'hfc5_pc2', 'hfc6_max', 
-       'hfc6_mean', 'hfc6_min', 'hfc6_std', 'hfc6_pc1', 'hfc6_pc2', 'sfc1_max', 'sfc1_mean', 'sfc1_min', 
-       'sfc1_std', 'sfc1_pc1', 'sfc1_pc2', 'sfc2_max', 'sfc2_mean', 'sfc2_min', 'sfc2_std', 'sfc2_pc1', 
-       'sfc2_pc2', 'sfc3_max', 'sfc3_mean', 'sfc3_min', 'sfc3_std', 'sfc3_pc1', 'sfc3_pc2', 'lfc1_max', 
-       'lfc1_mean', 'lfc1_min', 'lfc1_std', 'lfc1_pc1', 'lfc1_pc2', 'lfc2_max', 'lfc2_mean', 'lfc2_min', 
-       'lfc2_std', 'lfc2_pc1', 'lfc2_pc2', 'lfc3_max', 'lfc3_mean', 'lfc3_min', 'lfc3_std', 'lfc3_pc1', 
-       'lfc3_pc2', 'lfc4_max', 'lfc4_mean', 'lfc4_min', 'lfc4_std', 'lfc4_pc1', 'lfc4_pc2', 'cfc1_cs1', 
-       'cfc2_cs1', 'cfc3_cs3']
+afl = ['tfc1_mean','tfc1_std','tfc2_mean','tfc2_std'
+        ,'tfc3_mean','tfc3_std','tfc4_mean','tfc4_std','tfc5_mean','tfc5_std'
+        ,'tfc6_mean','tfc6_std','tfc7_mean','tfc7_std','tfc8_mean','tfc8_std'
+        ,'tfc9_mean','tfc9_std','tfc10_mean','tfc10_std','tfc11_mean','tfc11_std'
+        ,'tfc12__0','tfc12__1','tfc12__2','tfc12__3','tfc12__4','tfc12__5'
+        ,'tfc12__6','tfc12__7','tfc12__8','tfc12__9','tfc12__10','tfc12__11'
+        ,'tfc12__12','tfc12__13','tfc12__14','tfc12__15','tfc12__16','tfc12__17'
+        ,'tfc12__18','tfc12__19','tfc12__20','tfc12__21','tfc12__22','tfc12__23'
+        ,'tfc13_11_mean','tfc13_11_std','tfc13_12_mean','tfc13_12_std'
+        ,'tfc13_13_mean','tfc13_13_std','tfc13_21_mean','tfc13_21_std'
+        ,'tfc13_22_mean','tfc13_22_std','tfc14__0','tfc14__1','tfc14__2'
+        ,'tfc14__3','tfc14__4','tfc14__5','tfc14__6','tfc14__7','tfc14__8'
+        ,'tfc14__9','tfc14__10','tfc14__11','tfc14__12','tfc14__13','tfc14__14'
+        ,'tfc14__15','tfc14__16','tfc14__17','tfc14__18','tfc14__19','tfc14__20'
+        ,'tfc14__21','tfc14__22','tfc14__23','tfc15_mean','tfc15_std','tfc16_mean'
+        ,'tfc16_std','tfc17_mean','tfc17_std','tfc18_mean','tfc18_std'
+        ,'tfc19_mean','tfc19_std','tfc20_hc','tfc21_mean','tfc21_std','tfc22_mean'
+        ,'tfc22_std','tfc23_tr','tfc24_tr','tfc25_tr','tfc26_hminm'
+        ,'tfc26_hminstd','tfc26_hmaxm','tfc26_hmaxstd','tfc27_mean','tfc27_std'
+        ,'tfc28_mean','tfc28_std','tfc29_mean','tfc29_std','tfc30_mean'
+        ,'tfc30_std','tfc31_mean','tfc31_std','hfc1_mean','hfc1_std','hfc2_max'
+        ,'hfc2_mean','hfc2_min','hfc2_std','hfc2_pc1','hfc2_pc2','hfc3_max'
+        ,'hfc3_mean','hfc3_min','hfc3_std','hfc3_pc1','hfc3_pc2','hfc4__0'
+        ,'hfc4__1','hfc4__2','hfc4__3','hfc4__4','hfc4__5','hfc4__6','hfc4__7'
+        ,'hfc4__8','hfc4__9','hfc4__10','hfc4__11','hfc4__12','hfc4__13'
+        ,'hfc4__14','hfc4__15','hfc4__16','hfc4__17','hfc4__18','hfc4__19'
+        ,'hfc4__20','hfc4__21','hfc4__22','hfc4__23','hfc5_mean','hfc5_std'
+        ,'hfc6_mean','hfc6_std','hfc7_mean','hfc7_std','sfc1_mean','sfc1_std'
+        ,'sfc2_max','sfc2_mean','sfc2_min','sfc2_std','sfc2_pc1','sfc2_pc2'
+        ,'sfc3_mean','sfc3_std','sfc4_mean','sfc4_std','lfc1_mean','lfc1_std'
+        ,'lfc2_mean','lfc2_std','lfc3_mean','lfc3_std','lfc4_mean','lfc4_std'
+        ,'cfc1_cs1','cfc2_cs1','cfc3_cs3','cfc4_cscmax','cfc4_cscstd'
+        ,'cfc4_csrmax','cfc4_csrstd']
 afl = ['tfc1','tfc2','tfc3','tfc4','tfc5','tfc6','tfc7','tfc8','tfc9','tfc10',
        'tfc11','tfc12','tfc13','tfc14','tfc15','tfc16','tfc17','tfc18','tfc19',
-       'tfc20','hfc1','hfc2','hfc3','hfc4','hfc5','hfc6','sfc1','sfc2','sfc3',
-       'lfc1','lfc2','lfc3','lfc4','cfc1','cfc2','cfc3','cfc4']
-
+       'tfc20','tfc21','tfc22','tfc23','tfc24','tfc25','tfc26','tfc27','tfc28',
+       'tfc29','tfc30','tfc31','hfc1','hfc2','hfc3','hfc4','hfc5','hfc6','hfc7',
+       'sfc1','sfc2','sfc3','sfc4','lfc1','lfc2','lfc3','lfc4','cfc1','cfc2','cfc3','cfc4']
+isensemble = 0
 istrain = 0
-mn = 3
+isadddata = 0
+mn = 0
 dfn = 'df_tfc1'
 statsf = 'stats2'
 hci = 0.8
@@ -99,6 +121,70 @@ def stats2(df,df_base,col,pre,ci):
     df_temp = pd.merge(df_base, tn, how='left', on=['TERMINALNO'])
     return df_temp
 
+def la1(df,df_base,col,pre,type=0):
+    l1 = pre + 'mean'
+    l2 = pre + 'std'
+    if type == 1:
+        t1 = df.groupby(['TERMINALNO'])[col].agg({'count':'count'}).reset_index()
+    t1 = df.groupby(['TERMINALNO'])['count'].agg({l1:np.mean,l2:np.std}).reset_index()
+    df_temp = pd.merge(df_base, t1, how='left', on=['TERMINALNO'])
+    return df_temp
+
+def lb1(df,df_base,col,pre,type=0):
+    l1 = pre + 'mean'
+    l2 = pre + 'std'
+    if type == 1:
+        t1 = df.groupby(['TERMINALNO','month'])[col].agg({'mean':'count'}).reset_index()
+    else:
+        t1 = df.groupby(['TERMINALNO','month'])[col].agg({'mean':np.mean}).reset_index()
+    t1 = t1.groupby(['TERMINALNO'])['mean'].agg({l1:np.mean,l2:np.std}).reset_index()
+    df_temp = pd.merge(df_base, t1, how='left', on=['TERMINALNO'])
+    return df_temp
+
+def lc1(df,df_base,col,pre,type=0):
+    l1 = pre + 'mean'
+    l2 = pre + 'std'
+    if type == 1:
+        t1 = df.groupby(['TERMINALNO','weekday'])[col].agg({'mean':'count'}).reset_index()
+    else:
+        t1 = df.groupby(['TERMINALNO','weekday'])[col].agg({'mean':np.mean}).reset_index()
+    t1 = t1.groupby(['TERMINALNO'])['mean'].agg({l1:np.mean,l2:np.std}).reset_index()
+    df_temp = pd.merge(df_base, t1, how='left', on=['TERMINALNO'])
+    return df_temp
+
+def ld1(df,df_base,col,pre,type=0):
+    l1 = pre + 'mean'
+    l2 = pre + 'std'
+    if type == 1:
+        t1 = df.groupby(['TERMINALNO','wno'])[col].agg({'mean':'count'}).reset_index()
+    else:
+        t1 = df.groupby(['TERMINALNO','wno'])[col].agg({'mean':np.mean}).reset_index()
+    t1 = t1.groupby(['TERMINALNO'])['mean'].agg({l1:np.mean,l2:np.std}).reset_index()
+    df_temp = pd.merge(df_base, t1, how='left', on=['TERMINALNO'])
+    return df_temp
+
+def le1(df,df_base,col,pre,type=0):
+    l1 = pre + 'mean'
+    l2 = pre + 'std'
+    if type == 1:
+        t1 = df.groupby(['TERMINALNO','month','day'])[col].agg({'mean':'count'}).reset_index()
+    else:
+        t1 = df.groupby(['TERMINALNO','month','day'])[col].agg({'mean':np.mean}).reset_index()
+    t1 = t1.groupby(['TERMINALNO'])['mean'].agg({l1:np.mean,l2:np.std}).reset_index()
+    df_temp = pd.merge(df_base, t1, how='left', on=['TERMINALNO'])
+    return df_temp
+
+def lf1(df,df_base,col,pre,type=0):
+    l1 = pre + 'mean'
+    l2 = pre + 'std'
+    if type == 1:
+        t1 = df.groupby(['TERMINALNO','TRIP_ID'])[col].agg({'mean':'count'}).reset_index()
+    else:
+        t1 = df.groupby(['TERMINALNO','TRIP_ID'])[col].agg({'mean':np.mean}).reset_index()
+    t1 = t1.groupby(['TERMINALNO'])['mean'].agg({l1:np.mean,l2:np.std}).reset_index()
+    df_temp = pd.merge(df_base, t1, how='left', on=['TERMINALNO'])
+    return df_temp
+
 def cal_ratio(df,col,pre):
     df_temp1 = df[['TERMINALNO',col,'TRIP_ID']].groupby(['TERMINALNO',col]).count().reset_index()
     df_temp1.rename(columns={'TRIP_ID':'count1'}, inplace = True)
@@ -119,8 +205,9 @@ def cal_ratio(df,col,pre):
 feature:'tfc9','tfc10','tfc11','tfc4','hfc3','tfc1',gini:0.11162,本次成绩采用stat2,stat1:0.09978
 feature:'tfc9','tfc10','tfc11','tfc4','hfc1','tfc1',gini:0.13679,tfc1为强特征,统计量均采用stat2
 feature:'tfc9','tfc10','tfc11','tfc4','hfc7','tfc1',gini:0.14528
+feature:'tfc9','tfc10','tfc11','tfc4','hfc7','tfc1','tfc21','tfc24','tfc30', gini:0.17171
 '''
-def tfc1(df,df_base):#周一至周五出行时刻stats1值
+def tfc1(df,df_base):#周一至周五出行时刻stats1值,la
     fname = sys._getframe().f_code.co_name
     pre = fname + '_'
     mff[fname] = 1
@@ -209,9 +296,9 @@ def tfc10(df,df_base):#凌晨（0,1，2,3,4）出行占比stats1值
     fname = sys._getframe().f_code.co_name
     pre = fname + '_'
     mff[fname] = 1
-    t1 = df
-    t2 = t1.groupby(['TERMINALNO','month','day'])['hour'].count().reset_index()
-    t1 = t1[(df['hour'].isin([0,1,2,3,4]))]
+
+    t2 = df.groupby(['TERMINALNO','month','day'])['hour'].count().reset_index()
+    t1 = df[(df['hour'].isin([0,1,2,3,4]))]
     t3 = t1.groupby(['TERMINALNO','month','day'])['hour'].count().reset_index()
     t1 = pd.merge(t2, t3, how='left', on=['TERMINALNO','month','day'])
     t1['ratio1'] = t1['hour_y']/t1['hour_x']
@@ -222,9 +309,9 @@ def tfc11(df,df_base):#晚餐后（20,21,22,23）出行占比stats1值
     fname = sys._getframe().f_code.co_name
     pre = fname + '_'
     mff[fname] = 1
-    t1 = df
-    t2 = t1.groupby(['TERMINALNO','month','day'])['hour'].count().reset_index()
-    t1 = t1[(df['hour'].isin([20,21,22,23]))]
+
+    t2 = df.groupby(['TERMINALNO','month','day'])['hour'].count().reset_index()
+    t1 = df[(df['hour'].isin([20,21,22,23]))]
     t3 = t1.groupby(['TERMINALNO','month','day'])['hour'].count().reset_index()
     t1 = pd.merge(t2, t3, how='left', on=['TERMINALNO','month','day'])
     t1['ratio1'] = t1['hour_y']/t1['hour_x']
@@ -418,9 +505,9 @@ def tfc24(df,df_base):#凌晨（0,1，2,3,4）出行占比stats1值
     pre = fname + '_'
     mff[fname] = 1
     l1 = pre + 'tr'
-    t1 = df
-    t2 = t1.groupby(['TERMINALNO'])['hour'].count().reset_index()
-    t1 = t1[(df['hour'].isin([0,1,2,3,4]))]
+
+    t2 = df.groupby(['TERMINALNO'])['hour'].count().reset_index()
+    t1 = df[(df['hour'].isin([0,1,2,3,4]))]
     t3 = t1.groupby(['TERMINALNO'])['hour'].count().reset_index()
     t1 = pd.merge(t2, t3, how='left', on=['TERMINALNO'])
     t1[l1] = t1['hour_y']/t1['hour_x']
@@ -432,16 +519,16 @@ def tfc25(df,df_base):#晚餐后（20,21,22,23）出行占比stats1值
     pre = fname + '_'
     mff[fname] = 1
     l1 = pre + 'tr'
-    t1 = df
-    t2 = t1.groupby(['TERMINALNO'])['hour'].count().reset_index()
-    t1 = t1[(df['hour'].isin([20,21,22,23]))]
+
+    t2 = df.groupby(['TERMINALNO'])['hour'].count().reset_index()
+    t1 = df[(df['hour'].isin([20,21,22,23]))]
     t3 = t1.groupby(['TERMINALNO'])['hour'].count().reset_index()
     t1 = pd.merge(t2, t3, how='left', on=['TERMINALNO'])
     t1[l1] = t1['hour_y']/t1['hour_x']
     t1 = pd.merge(df_base, t1, how='left', on=['TERMINALNO'])
     return t1[['TERMINALNO',l1]]
 
-def tfc26(df,df_base):#周一至周五，按天统计最早及最晚出行时刻
+def tfc26(df,df_base):#周一至周五，按天统计最早及最晚出行时刻,le
     fname = sys._getframe().f_code.co_name
     pre = fname + '_'
     mff[fname] = 1
@@ -460,7 +547,7 @@ def tfc26(df,df_base):#周一至周五，按天统计最早及最晚出行时刻
     t1 = pd.merge(df_base, t1, how='left', on=['TERMINALNO'])
     return t1
 
-def tfc27(df,df_base):#周一至周五出行时刻按天std值stats1值
+def tfc27(df,df_base):#周一至周五出行时刻按天std值stats1值,le
     fname = sys._getframe().f_code.co_name
     pre = fname + '_'
     mff[fname] = 1
@@ -470,7 +557,7 @@ def tfc27(df,df_base):#周一至周五出行时刻按天std值stats1值
     func = globals().get(statsf)
     return func(t1,df_base,'hour',pre,tci)
 
-def tfc28(df,df_base):#周一至周五凌晨（0,1，2,3,4）出行占比stats1值
+def tfc28(df,df_base):#周一至周五凌晨（0,1，2,3,4）出行占比stats1值,le
     fname = sys._getframe().f_code.co_name
     pre = fname + '_'
     mff[fname] = 1
@@ -483,7 +570,7 @@ def tfc28(df,df_base):#周一至周五凌晨（0,1，2,3,4）出行占比stats1�
     func = globals().get(statsf)
     return func(t1,df_base,'ratio1',pre,tci)
 
-def tfc29(df,df_base):#之一至周五晚餐后（20,21,22,23）出行占比stats1值
+def tfc29(df,df_base):#周一至周五晚餐后（20,21,22,23）出行占比stats1值,le
     fname = sys._getframe().f_code.co_name
     pre = fname + '_'
     mff[fname] = 1
@@ -496,7 +583,7 @@ def tfc29(df,df_base):#之一至周五晚餐后（20,21,22,23）出行占比stat
     func = globals().get(statsf)
     return func(t1,df_base,'ratio1',pre,tci)
 
-def tfc30(df,df_base):#按月计算周一至周五出行时刻stats1值
+def tfc30(df,df_base):#按月计算周一至周五出行时刻stats1值,lb
     fname = sys._getframe().f_code.co_name
     pre = fname + '_'
     mff[fname] = 1
@@ -506,7 +593,7 @@ def tfc30(df,df_base):#按月计算周一至周五出行时刻stats1值
     func = globals().get(statsf)
     return func(t1,df_base,'hour',pre,tci)
 
-def tfc31(df,df_base):#按周计算周一至周五出行时刻stats1值
+def tfc31(df,df_base):#按周计算周一至周五出行时刻stats1值,ld
     fname = sys._getframe().f_code.co_name
     pre = fname + '_'
     mff[fname] = 1
@@ -515,6 +602,37 @@ def tfc31(df,df_base):#按周计算周一至周五出行时刻stats1值
     t1 = t1.groupby(['TERMINALNO','wno'])['hour'].mean().reset_index()
     func = globals().get(statsf)
     return func(t1,df_base,'hour',pre,tci)
+
+def tfc32(df,df_base):#计算周一至周五出行时长与总时长的占比
+    fname = sys._getframe().f_code.co_name
+    pre = fname + '_'
+    mff[fname] = 1
+    l1 = pre + 'tr'
+
+
+    t2 = df.groupby(['TERMINALNO'])['hour'].count().reset_index()
+    t1 = df[(df['weekday'] < 5)]
+    t3 = t1.groupby(['TERMINALNO'])['hour'].count().reset_index()
+    t1 = pd.merge(t2, t3, how='left', on=['TERMINALNO'])
+    t1[l1] = t1['hour_y']/t1['hour_x']
+    t1 = t1.drop(['hour_x','hour_y'], axis=1)
+    t1 = pd.merge(df_base, t1, how='left', on=['TERMINALNO'])
+    return t1
+
+def tfc33(df,df_base):#按周计算周一和周五出行时长与总时长的占比
+    fname = sys._getframe().f_code.co_name
+    pre = fname + '_'
+    mff[fname] = 1
+    l1 = pre + 'tr'
+
+    t2 = df.groupby(['TERMINALNO'])['hour'].count().reset_index()
+    t1 = df[(df['weekday'].isin([0,4]))]
+    t3 = t1.groupby(['TERMINALNO'])['hour'].count().reset_index()
+    t1 = pd.merge(t2, t3, how='left', on=['TERMINALNO'])
+    t1[l1] = t1['hour_y']/t1['hour_x']
+    t1 = t1.drop(['hour_x','hour_y'], axis=1)
+    t1 = pd.merge(df_base, t1, how='left', on=['TERMINALNO'])
+    return t1
 
 #海拔特征
 def hfc1(df,df_base):#周一至周五出行海拔stats1值
@@ -560,8 +678,8 @@ def hfc5(df,df_base):#按天计算海拔极差,再按车主计算极差的均值
     fname = sys._getframe().f_code.co_name
     pre = fname + '_'
     mff[fname] = 1
-    t1 = df
-    t1 = t1.groupby(['TERMINALNO','month','day'])['HEIGHT'].agg(lambda x:max(x)-min(x)).reset_index()
+
+    t1 = df.groupby(['TERMINALNO','month','day'])['HEIGHT'].agg(lambda x:max(x)-min(x)).reset_index()
     # t1 = t1.groupby(['TERMINALNO'])['HEIGHT'].agg({l1:np.mean,l2:np.std}).reset_index()
     func = globals().get(statsf)
     return func(t1,df_base,'HEIGHT',pre,lci)
@@ -608,8 +726,8 @@ def sfc3(df,df_base):#出行速度stats1值
     fname = sys._getframe().f_code.co_name
     pre = fname + '_'
     mff[fname] = 1
-    t1 = df
-    t1 = t1[(t1['SPEED'] > 0)]
+
+    t1 = df[(df['SPEED'] > 0)]
     func = globals().get(statsf)
     return func(t1,df_base,'SPEED',pre,sci)
 
@@ -628,6 +746,8 @@ def lfc1(df,df_base):#周一至周五出行区域stats1值
     pre = fname + '_'
     mff[fname] = 1
     t1 = df[(df['weekday'] < 5)]
+    t1 = t1[(t1['LONGITUDE'] < 136) & (t1['LONGITUDE'] > 72)]
+    t1 = t1[(t1['LATITUDE'] < 54) & (t1['LATITUDE'] > 3)]
     t1 = t1.groupby(['TERMINALNO','month','day']).apply(
         lambda x: (np.max(x['LONGITUDE']) - np.min(x['LONGITUDE']))*100 + 
         (np.max(x['LATITUDE']) - np.min(x['LATITUDE']))*100).reset_index()
@@ -640,6 +760,8 @@ def lfc2(df,df_base):#周六、日出行区域stats1值
     pre = fname + '_'
     mff[fname] = 1
     t1 = df[(df['weekday'] >= 5)]
+    t1 = t1[(t1['LONGITUDE'] < 136) & (t1['LONGITUDE'] > 72)]
+    t1 = t1[(t1['LATITUDE'] < 54) & (t1['LATITUDE'] > 3)]
     t1 = t1.groupby(['TERMINALNO','month','day']).apply(
         lambda x: (np.max(x['LONGITUDE']) - np.min(x['LONGITUDE']))*100 + 
         (np.max(x['LATITUDE']) - np.min(x['LATITUDE']))*100).reset_index()
@@ -651,7 +773,9 @@ def lfc3(df,df_base):#出行区域stats1值
     fname = sys._getframe().f_code.co_name
     pre = fname + '_'
     mff[fname] = 1
-    t1 = df
+    
+    t1 = df[(df['LONGITUDE'] < 136) & (df['LONGITUDE'] > 72)]
+    t1 = t1[(t1['LATITUDE'] < 54) & (t1['LATITUDE'] > 3)]
     t1 = t1.groupby(['TERMINALNO','month','day']).apply(
         lambda x: (np.max(x['LONGITUDE']) - np.min(x['LONGITUDE']))*100 + 
         (np.max(x['LATITUDE']) - np.min(x['LATITUDE']))*100).reset_index()
@@ -663,7 +787,9 @@ def lfc4(df,df_base):#按天计算经纬极差,再按车主计算极差的stats1
     fname = sys._getframe().f_code.co_name
     pre = fname + '_'
     mff[fname] = 1
-    t1 = df
+
+    t1 = df[(df['LONGITUDE'] < 136) & (df['LONGITUDE'] > 72)]
+    t1 = t1[(t1['LATITUDE'] < 54) & (t1['LATITUDE'] > 3)]
     t2 = t1.groupby(['TERMINALNO','month','day'])['LONGITUDE'].agg(lambda x:max(x)-min(x)).reset_index()
     t3 = t1.groupby(['TERMINALNO','month','day'])['LATITUDE'].agg(lambda x:max(x)-min(x)).reset_index()
     t1 = pd.merge(t2, t3, how='left', on=['TERMINALNO','month','day'])
@@ -678,6 +804,8 @@ def lfc5(df,df_base):#周一至周五出行区域stats1值
     l1 =  pre + 'area1'
 
     t1 = df[(df['weekday'] < 5)]
+    t1 = t1[(t1['LONGITUDE'] < 136) & (t1['LONGITUDE'] > 72)]
+    t1 = t1[(t1['LATITUDE'] < 54) & (t1['LATITUDE'] > 3)]
     t1 = t1.groupby(['TERMINALNO']).apply(
         lambda x: (np.max(x['LONGITUDE']) - np.min(x['LONGITUDE']))*100 + 
         (np.max(x['LATITUDE']) - np.min(x['LATITUDE']))*100).reset_index()
@@ -692,6 +820,8 @@ def lfc6(df,df_base):#双休日出行区域stats1值
     l1 =  pre + 'area1'
 
     t1 = df[(df['weekday'] >= 5)]
+    t1 = t1[(t1['LONGITUDE'] < 136) & (t1['LONGITUDE'] > 72)]
+    t1 = t1[(t1['LATITUDE'] < 54) & (t1['LATITUDE'] > 3)]
     t1 = t1.groupby(['TERMINALNO']).apply(
         lambda x: (np.max(x['LONGITUDE']) - np.min(x['LONGITUDE']))*100 + 
         (np.max(x['LATITUDE']) - np.min(x['LATITUDE']))*100).reset_index()
@@ -756,7 +886,6 @@ def cfc4(df,df_base):#按tripid统计callstate的时长，比率
     l5 = pre + '_1'
     l6 = pre + '_3'
 
-    t1 = df
     t1 = df.groupby(['TERMINALNO','TRIP_ID','CALLSTATE'])['TRIP_ID'].agg({'cscount':'count'}).reset_index()
     t2 = pd.get_dummies(t1['CALLSTATE'], prefix= pre)
     t1 = pd.concat([t1, t2], axis=1)
@@ -927,18 +1056,7 @@ def predict1(X_train,y_train,X_test):
     elif mn == 3:
         X_train.fillna(0, inplace = True)
         X_test.fillna(0, inplace = True)
-        t = pd.concat([y_train,X_train], axis=1)
-        df_pay = t[t['Y'] > 0]
-        t = pd.concat([t,df_pay,df_pay,df_pay,df_pay,df_pay,df_pay,df_pay],axis=0)
-        X_train = t.iloc[:,1:]
-        y_train = t['Y']
-        model1 = GradientBoostingRegressor(n_estimators=300, max_depth=3, min_samples_split=10, learning_rate=0.01, loss='ls')
-        model2 = RandomForestRegressor(n_estimators=1300, max_features = 0.5, min_samples_leaf=30,random_state=1)
-        model1.fit(X_train, y_train)
-        pred1 = model1.predict(X_test)
-        model2.fit(X_train, y_train)
-        pred2 = model2.predict(X_test)
-        return (pred1+pred2)/2
+        model = RandomForestRegressor(**mparams[mn])
     else:
         model = lgb.LGBMRegressor(**mparams[mn])
     if cv == 1:
@@ -958,12 +1076,16 @@ def fsbymodel1(X_train,y_train):
     feature_importance = model.feature_importances_
     sorted_idx = np.argsort(-feature_importance)
     feature_name = X_train.columns
+    t1 = []
     c = 0
     for i in sorted_idx:
         if c > 38:
             break
         # logging.info(feature_name[i]+':'+str(feature_importance[i]))
+        # print(feature_name[i])
+        t1.append(feature_name[i])
         c = c+1
+    return t1
 
 def score1(X,y):
     if cv == 1:
@@ -1012,47 +1134,129 @@ def testfeature1(afl,fl,hs,df_feature):
             cfl = hsfl
             cit = len(hsfl)
 
+def dataexp1(fl,df):
+    fbi1 = ['tfc26','tfc21','sfc2','tfc18','tfc15','tfc19','tfc31']
+    fl['p1'] = fbi1
+    t1 = makefeature1(fl,df)
+    t2 = t1.copy()
+    t4 = selectfeature1(fbi1,t2)
+    t3 = t2[t2['Y'] > 0]
+    i1 = 0
+    i2 = 0
+    giniv1 = 0
+    while i1 < 8:
+        while i2 < i1:
+            t2 = pd.concat([t2, t3], axis=0)
+            i2 = i2 + 1
+        i1 = i1 + 1
+
+        # t4 = selectfeature1(afl,t2)
+        # X_train2 = t4.iloc[:,1:]
+        # y_train2 = t2['Y']
+        # fbi1 = fsbymodel1(X_train2,y_train2)
+        
+        t4 = selectfeature1(fbi1,t2)
+        X_train2 = t4.iloc[:,1:]
+        y_train2 = t2['Y']
+
+        X_train2.fillna(0, inplace = True)
+        y_train2.fillna(0, inplace = True)
+        model = GradientBoostingRegressor(**mparams[0])
+        model.fit(X_train2, y_train2)
+
+        t4 = selectfeature1(fbi1,t1)
+        X_train1 = t4.iloc[:,1:]
+        y_train1 = t1['Y']
+        X_train1.fillna(0, inplace = True)
+        y_train1.fillna(0, inplace = True)
+        kf1 = KFold(n_splits=10, shuffle=True, random_state=0)
+        for train, test in kf1.split(X_train1,y_train1):
+            giniv1 = giniv1 + gini(model.predict(X_train1.values[test]),y_train1[test])
+        giniv1 = giniv1 / 10
+        logging.info("adddata:%d,gini:%f,feature:%s"%(i1-1,giniv1,','.join(fbi1)))
+
 def process():
     df = pd.read_csv(path_train, dtype=dict(TERMINALNO=np.uint16, TIME=np.uint32, TRIP_ID=np.uint16,
                                             LONGITUDE=np.float32, LATITUDE=np.float32, DIRECTION=np.int16,
                                             HEIGHT=np.float32, SPEED=np.float32, CALLSTATE=np.uint8,
                                             Y=np.float16))
     transdata1(df)
-    logging.info("hci:%f,tci:%f,lci:%f,sci:%f,train:%d,cv:%d,mn:%d"%(hci,tci,lci,sci,istrain,cv,mn))
-    
+    global mn,fl
+    logging.info("hci:%f,tci:%f,lci:%f,sci:%f,train:%d,cv:%d,mn:%d,ensemble:%d,adddata:%d"%(hci,tci,lci,sci,istrain,cv,mn,isensemble,isadddata))
     if istrain == 1:
         # fl['p1'] = afl
+        # dataexp1(fl,df)
+        # return
         df_feature = makefeature1(fl,df)
+        #以下为生成多份理赔样本
+        if isadddata > 0:
+            t1 = df_feature[df_feature['Y'] > 0]
+            t2 = df_feature[df_feature['Y'] > 1]
+            i1 = 0
+            while i1 < isadddata:
+                df_feature = pd.concat([df_feature, t1, t2], axis=0)
+                i1 = i1 + 1
         # df_sf = selectfeature1(afl,df_feature) 
         # X_train = df_sf.iloc[:,1:]
         # y_train = df_feature['Y']
-        # gs1(X_train,y_train)
+        # # gs1(X_train,y_train)
         # fsbymodel1(X_train,y_train)
-        # testfeature1(afl,['sfc2','lfc2','tfc2','tfc13','tfc16','cfc3','tfc11'],0.0655,df_feature)
+        # testfeature1(afl,['tfc26','tfc21','sfc2','tfc18','tfc15','tfc19','tfc31'],0.1608,df_feature)
         for i1,v1 in fl.items():
             df_sf = selectfeature1(v1,df_feature)
             logging.debug(df_sf.columns.tolist())
             giniv1,mse1 = score1(df_sf.iloc[:,1:],df_feature['Y'])
             logging.info("gini:%f,mse:%f,feature:%s"%(giniv1,mse1,','.join(v1))) 
     else:
-        f = ['tfc9','tfc10','tfc11','tfc4','hfc7','tfc1'] # 需要在test data上执行的特征组合
-        logging.info("feature:%s"%(','.join(f))) 
+        fl = {}
+        f = ['tfc9','tfc10','tfc11','tfc4','hfc7','tfc1','tfc21','tfc24','tfc30'] # gbr特征
+        logging.info("gbr feature:%s"%(','.join(f))) 
         fl['p1'] = f
         df_feature = makefeature1(fl,df)
+
+        #以下为生成多份理赔样本
+        if isadddata > 0:
+            t1 = df_feature[df_feature['Y'] > 0]
+            t2 = df_feature[df_feature['Y'] > 1]
+            i1 = 0
+            while i1 < isadddata:
+                df_feature = pd.concat([df_feature, t1, t2], axis=0)
+                i1 = i1 + 1
+
         df_sf = selectfeature1(f,df_feature)
         X_train = df_sf.iloc[:,1:]
         y_train = df_feature['Y']
+        
         mff.clear()
+        if isensemble == 1:
+            fl1 = {}
+            f1 = ['tfc2','tfc5','tfc7','tfc8','tfc12','tfc13','tfc14','hfc2','sfc1','sfc2','lfc1','lfc2','cfc4'] # rf特征
+            logging.info("rf feature:%s"%(','.join(f1))) 
+            fl1['p1'] = f1
+            df_feature = makefeature1(fl1,df)
+            df_sf = selectfeature1(f1,df_feature)
+            X_train1 = df_sf.iloc[:,1:]
+            y_train1 = df_feature['Y']
+            mff.clear()
+
         df = pd.read_csv(path_test, dtype=dict(TERMINALNO=np.uint16, TIME=np.uint32, TRIP_ID=np.uint16,
-                                                    LONGITUDE=np.float32, LATITUDE=np.float32, DIRECTION=np.int16,
-                                                    HEIGHT=np.float32, SPEED=np.float32, CALLSTATE=np.uint8))
+                                               LONGITUDE=np.float32, LATITUDE=np.float32, DIRECTION=np.int16,
+                                               HEIGHT=np.float32, SPEED=np.float32, CALLSTATE=np.uint8))
         transdata1(df)
         df_feature = makefeature1(fl,df)
         logging.debug(df_feature.columns) 
         df_sf = selectfeature1(f,df_feature)
         X_test = df_sf.iloc[:,1:]
         logging.debug(X_test.columns)
-        df_feature["Y"] = predict1(X_train,y_train,X_test)
+        pred1 = predict1(X_train,y_train,X_test)
+        if isensemble == 1:
+            mn = 3
+            df_feature = makefeature1(fl1,df)
+            df_sf = selectfeature1(f1,df_feature)
+            X_test1 = df_sf.iloc[:,1:]
+            pred2 = predict1(X_train1,y_train1,X_test1)
+            pred1 = (pred1 + pred2)/2
+        df_feature["Y"] = pred1
         output(df_feature)
 
 if __name__ == "__main__":
